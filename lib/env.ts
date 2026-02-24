@@ -1,0 +1,33 @@
+// lib/env.ts
+// Typed environment variable access — single source of truth
+// All server-side code imports env vars from here, NOT from process.env directly
+
+function getEnv(key: string, required = false): string {
+    const value = process.env[key] ?? ''
+    if (required && !value) {
+        throw new Error(`Missing required environment variable: ${key}`)
+    }
+    return value
+}
+
+export const env = {
+    // Supabase
+    NEXT_PUBLIC_SUPABASE_URL: getEnv('NEXT_PUBLIC_SUPABASE_URL', true),
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', true),
+    SUPABASE_SERVICE_ROLE_KEY: getEnv('SUPABASE_SERVICE_ROLE_KEY'),
+
+    // Database
+    DATABASE_URL: getEnv('DATABASE_URL'),
+    DIRECT_URL: getEnv('DIRECT_URL'),
+
+    // AI Providers
+    GEMINI_API_KEY: getEnv('GEMINI_API_KEY'),
+
+    // Security
+    CRON_SECRET: getEnv('CRON_SECRET'),
+    ENCRYPTION_KEY: getEnv('ENCRYPTION_KEY'),
+
+    // App
+    NODE_ENV: process.env.NODE_ENV ?? 'development',
+    IS_PRODUCTION: process.env.NODE_ENV === 'production',
+} as const

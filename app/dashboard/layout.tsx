@@ -10,6 +10,7 @@ import {
     Shield, FolderTree, Settings, Menu
 } from 'lucide-react'
 import { NotificationBell } from '@/components/shared/NotificationBell'
+import ChatPanel from '@/components/chat/ChatPanel'
 
 // Icon mapping function
 const getIconForLabel = (label: string) => {
@@ -184,6 +185,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     </div>
                 </main>
             </div>
+
+            {/* AI Knowledge Assistant (floating) */}
+            <ChatPanel />
         </div>
     )
 }

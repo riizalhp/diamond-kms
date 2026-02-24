@@ -138,20 +138,23 @@ model UserDivision {
 }
 
 model Document {
-  id               String          @id @default(uuid())
-  organization_id  String
-  division_id      String
-  uploaded_by      String
-  file_name        String
-  file_path        String
-  file_size        Int
-  mime_type        String
-  ai_title         String?
-  ai_summary       String?         @db.Text
-  ai_tags          String[]
-  protection_config Json?
-  is_processed     Boolean         @default(false)
-  created_at       DateTime        @default(now())
+  id                 String          @id @default(uuid())
+  organization_id    String
+  division_id        String
+  uploaded_by        String
+  file_name          String
+  file_path          String
+  file_size          Int
+  mime_type          String
+  ai_title           String?
+  ai_summary         String?         @db.Text
+  ai_tags            String[]
+  protection_config  Json?
+  is_processed       Boolean         @default(false)
+  embedding_model    String?         // 'text-embedding-004' | 'nomic-embed-text'
+  embedding_version  Int             @default(0)
+  processing_error   String?         @db.Text
+  created_at         DateTime        @default(now())
 
   organization     Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   division         Division        @relation(fields: [division_id], references: [id], onDelete: Cascade)
@@ -163,13 +166,15 @@ model Document {
 }
 
 model DocumentChunk {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   document_id      String
   chunk_index      Int
-  content          String   @db.Text
-  embedding        Unsupported("vector(1536)")?
+  content          String    @db.Text
+  embedding        Unsupported("vector(768)")?
   token_count      Int
   page_number      Int?
+  page_end         Int?
+  created_at       DateTime  @default(now())
 
   document         Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
 

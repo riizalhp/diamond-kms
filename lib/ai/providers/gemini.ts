@@ -1,0 +1,115 @@
+// lib/ai/providers/gemini.ts
+// Google Gemini 2.5 Flash — provider utama DIAMOND KMS
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import type { AIService, DocumentMetadata } from '../types'
+import { logger } from '@/lib/logging/redact'
+
+export class GeminiService implements AIService {
+    readonly providerName = 'google-gemini'
+    readonly embeddingModel = 'text-embedding-004'
+
+    private genAI: GoogleGenerativeAI
+    private chatModel: string
+
+    constructor(apiKey: string, chatModel = 'gemini-2.5-flash') {
+        this.genAI = new GoogleGenerativeAI(apiKey)
+        this.chatModel = chatModel
+    }
+
+    // ─── Embedding ──────────────────────────────────────────────
+    async generateEmbedding(text: string): Promise<number[]> {
+        const model = this.genAI.getGenerativeModel({ model: this.embeddingModel })
+        const result = await model.embedContent(text)
+        return result.embedding.values // 768-dimensional float array
+    }
+
+    // ─── Completion ─────────────────────────────────────────────
+    async generateCompletion(
+        prompt: string,
+        options?: { systemPrompt?: string; maxTokens?: number; jsonMode?: boolean }
+    ): Promise<string> {
+        const model = this.genAI.getGenerativeModel({
+            model: this.chatModel,
+            generationConfig: {
+                maxOutputTokens: options?.maxTokens ?? 2048,
+                responseMimeType: options?.jsonMode ? 'application/json' : 'text/plain',
+            },
+            ...(options?.systemPrompt && {
+                systemInstruction: options.systemPrompt,
+            }),
+        })
+        const result = await model.generateContent(prompt)
+        return result.response.text()
+    }
+
+    // ─── Streaming ──────────────────────────────────────────────
+    async streamCompletion(
+        prompt: string,
+        systemPrompt: string,
+        onChunk: (chunk: string) => void,
+        signal?: AbortSignal
+    ): Promise<void> {
+        const model = this.genAI.getGenerativeModel({
+            model: this.chatModel,
+            systemInstruction: systemPrompt,
+        })
+        const result = await model.generateContentStream(prompt)
+        for await (const chunk of result.stream) {
+            if (signal?.aborted) break
+            const text = chunk.text()
+            if (text) onChunk(text)
+        }
+    }
+
+    // ─── Document Metadata (Gemini-native multimodal) ───────────
+    async generateDocumentMetadata(
+        input: { text?: string; fileBuffer?: Buffer; fileName: string }
+    ): Promise<DocumentMetadata> {
+        const model = this.genAI.getGenerativeModel({ model: this.chatModel })
+
+        const PROMPT = `Analyze this document and return ONLY valid JSON (no markdown fences):
+{
+  "title": "concise document title in the document's language (max 80 chars)",
+  "summary": "2-3 paragraph summary (max 200 words)",
+  "tags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
+  "language": "id or en or mixed",
+  "docType": "sop or policy or guide or report or regulation or other"
+}`
+
+        let result
+        if (input.fileBuffer) {
+            // Gemini multimodal: send PDF directly without pre-extraction
+            result = await model.generateContent([
+                {
+                    inlineData: {
+                        data: input.fileBuffer.toString('base64'),
+                        mimeType: 'application/pdf',
+                    },
+                },
+                PROMPT,
+            ])
+        } else {
+            result = await model.generateContent(
+                `Document "${input.fileName}":\n${input.text?.slice(0, 30000)}\n\n${PROMPT}`
+            )
+        }
+
+        const raw = result.response.text().trim()
+        // Strip markdown fences if present
+        const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
+
+        try {
+            return JSON.parse(clean) as DocumentMetadata
+        } catch (parseError) {
+            logger.error('Failed to parse Gemini metadata response:', raw)
+            // Fallback metadata
+            return {
+                title: input.fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
+                summary: input.text?.slice(0, 200) ?? 'Document summary not available',
+                tags: ['document'],
+                language: 'id',
+                docType: 'other',
+            }
+        }
+    }
+}

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { getDivisionsAction } from '@/lib/actions/user.actions'
-import { createDocumentAction, processDocumentAction } from '@/lib/actions/document.actions'
+import { createDocumentAction } from '@/lib/actions/document.actions'
 import { ArrowLeft, Upload, FileText, CheckCircle, Loader2, Bot, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 
@@ -46,42 +46,6 @@ export default function UploadDocumentPage() {
         if (selectedFile) setFile(selectedFile)
     }
 
-    const simulateAIProcessing = (fileName: string, fileContent: string) => {
-        // Simulate AI processing for demo - in production this would call Gemini/OpenAI
-        const title = fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
-        const words = fileContent.split(/\s+/)
-        const summary = words.length > 50
-            ? words.slice(0, 50).join(' ') + '...'
-            : fileContent || `AI-generated summary for ${fileName}`
-
-        const tags = ['document', 'knowledge-base']
-        if (fileName.toLowerCase().includes('sop')) tags.push('sop')
-        if (fileName.toLowerCase().includes('policy')) tags.push('policy')
-        if (fileName.toLowerCase().includes('manual')) tags.push('manual')
-        tags.push(fileName.split('.').pop() || 'file')
-
-        // Create chunks (split by paragraphs or every ~500 chars)
-        const chunkSize = 500
-        const chunks: { content: string; tokenCount: number; pageNumber: number }[] = []
-        for (let i = 0; i < fileContent.length; i += chunkSize) {
-            chunks.push({
-                content: fileContent.slice(i, i + chunkSize),
-                tokenCount: Math.ceil(fileContent.slice(i, i + chunkSize).split(/\s+/).length * 1.3),
-                pageNumber: Math.floor(i / chunkSize) + 1
-            })
-        }
-
-        if (chunks.length === 0) {
-            chunks.push({
-                content: `Content of ${fileName} - this document is pending full text extraction.`,
-                tokenCount: 10,
-                pageNumber: 1
-            })
-        }
-
-        return { title, summary, tags, chunks }
-    }
-
     const handleUpload = async () => {
         if (!file || !user?.id || !organization?.id || !divisionId) return
         setError('')
@@ -89,11 +53,29 @@ export default function UploadDocumentPage() {
         setUploading(true)
 
         try {
-            // Step 1: Create document record
-            const filePath = `/uploads/${organization.id}/${Date.now()}_${file.name}`
+            // Step 1: Upload file to Supabase Storage
+            const { createClient } = await import('@/lib/supabase/client')
+            const supabase = createClient()
+            const storagePath = `${organization.id}/${Date.now()}_${file.name}`
+
+            const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(storagePath, file, {
+                    cacheControl: '3600',
+                    upsert: false,
+                })
+
+            if (uploadError) {
+                setError(`Upload gagal: ${uploadError.message}`)
+                setStep('select')
+                setUploading(false)
+                return
+            }
+
+            // Step 2: Create document record in DB with the actual storage path
             const docRes = await createDocumentAction({
                 fileName: file.name,
-                filePath,
+                filePath: storagePath,
                 fileSize: file.size,
                 mimeType: file.type,
                 divisionId,
@@ -112,33 +94,52 @@ export default function UploadDocumentPage() {
             setStep('processing')
             setProcessing(true)
 
-            // Step 2: Read file content (for text-based files)
-            let fileContent = ''
-            try {
-                fileContent = await file.text()
-            } catch {
-                fileContent = `Binary file: ${file.name} (${file.type})`
-            }
+            // Step 3: Trigger real AI processing via API
+            const processResponse = await fetch('/api/ai/process-document', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-internal-secret': 'diamond-kms-cron-secret-2026',
+                },
+                body: JSON.stringify({ documentId: docRes.data!.id }),
+            })
 
-            // Step 3: Simulate AI processing
-            await new Promise(r => setTimeout(r, 2000)) // Simulate AI latency
-            const aiData = simulateAIProcessing(file.name, fileContent)
+            const processResult = await processResponse.json()
 
-            // Step 4: Save AI results
-            const processRes = await processDocumentAction(docRes.data!.id, aiData)
-
-            if (!processRes.success) {
-                setError(processRes.error || 'AI processing failed')
+            if (!processResponse.ok || !processResult.success) {
+                setError(processResult.error || 'AI processing failed')
                 setStep('select')
                 setProcessing(false)
                 return
             }
 
-            setResult({ docId: docRes.data!.id, ...aiData })
+            // Step 4: Fetch updated document with AI metadata
+            const { getDocumentByIdAction } = await import('@/lib/actions/document.actions')
+            const updatedDoc = await getDocumentByIdAction(docRes.data!.id)
+
+            if (updatedDoc.success && updatedDoc.data) {
+                setResult({
+                    docId: docRes.data!.id,
+                    title: updatedDoc.data.ai_title || file.name,
+                    summary: updatedDoc.data.ai_summary || 'Processing complete',
+                    tags: updatedDoc.data.ai_tags || [],
+                    chunks: processResult.data?.chunks || 0,
+                })
+            } else {
+                setResult({
+                    docId: docRes.data!.id,
+                    title: file.name,
+                    summary: 'Document processed successfully',
+                    tags: ['document'],
+                    chunks: processResult.data?.chunks || 0,
+                })
+            }
+
             setStep('done')
             setProcessing(false)
-        } catch (err: any) {
-            setError(err.message || 'Upload failed')
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Upload failed'
+            setError(message)
             setStep('select')
             setUploading(false)
             setProcessing(false)
@@ -179,8 +180,8 @@ export default function UploadDocumentPage() {
                             onDragLeave={() => setDragOver(false)}
                             onDrop={handleDrop}
                             className={`border-2 border-dashed rounded-xl p-12 text-center transition-all cursor-pointer ${dragOver ? 'border-navy-600 bg-navy-50' :
-                                    file ? 'border-success bg-success-bg' :
-                                        'border-surface-300 hover:border-navy-400 hover:bg-surface-50'
+                                file ? 'border-success bg-success-bg' :
+                                    'border-surface-300 hover:border-navy-400 hover:bg-surface-50'
                                 }`}
                             onClick={() => document.getElementById('file-input')?.click()}
                         >
@@ -278,7 +279,7 @@ export default function UploadDocumentPage() {
                             </div>
                             <div>
                                 <span className="text-xs font-semibold uppercase text-text-300 tracking-wider">Chunks Created</span>
-                                <p className="text-text-700 mt-1">{result.chunks.length} searchable chunk(s)</p>
+                                <p className="text-text-700 mt-1">{result.chunks} searchable chunk(s)</p>
                             </div>
                         </div>
 

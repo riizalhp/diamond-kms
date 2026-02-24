@@ -139,9 +139,38 @@ export async function deleteDocumentAction(id: string) {
     }
 }
 
-export async function searchDocumentsAction(orgId: string, query: string) {
+export async function searchDocumentsAction(
+    orgId: string,
+    query: string,
+    options?: {
+        userId?: string
+        userRole?: string
+        divisionId?: string
+        crossDivisionEnabled?: boolean
+    }
+) {
     try {
-        // Text-based search across chunks and document metadata
+        // Try hybrid search (semantic + full-text) if user context is available
+        if (options?.userId && options?.userRole && options?.divisionId) {
+            try {
+                const { hybridSearch } = await import('@/lib/search/hybrid-search')
+                const Role = await import('@prisma/client').then(m => m.Role)
+                const results = await hybridSearch({
+                    query,
+                    orgId,
+                    userId: options.userId,
+                    userRole: options.userRole as typeof Role[keyof typeof Role],
+                    divisionId: options.divisionId,
+                    crossDivisionEnabled: options.crossDivisionEnabled ?? false,
+                })
+                return { success: true, data: results }
+            } catch (hybridErr) {
+                console.warn('Hybrid search failed, falling back to basic search:', hybridErr)
+                // Fall through to basic search
+            }
+        }
+
+        // Fallback: basic SQL full-text search
         const results = await prisma.document.findMany({
             where: {
                 organization_id: orgId,
@@ -165,7 +194,8 @@ export async function searchDocumentsAction(orgId: string, query: string) {
         })
 
         return { success: true, data: results }
-    } catch (error: any) {
-        return { success: false, error: error.message }
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Search failed'
+        return { success: false, error: message }
     }
 }
