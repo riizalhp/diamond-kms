@@ -33,6 +33,11 @@ export default function RegisterPage() {
             formData.append('email', data.email)
             formData.append('password', data.password)
 
+            // AI Configuration
+            formData.append('aiProvider', data.aiProvider ?? 'managed')
+            if (data.apiKey) formData.append('apiKey', data.apiKey)
+            if (data.endpointUrl) formData.append('endpointUrl', data.endpointUrl)
+
             const res = await registerOrgAction(formData)
             if (res.success) {
                 // Force them to login or redirect directly
@@ -101,13 +106,64 @@ export default function RegisterPage() {
                     {errors.password && <p className="mt-1 text-sm text-danger">{errors.password.message}</p>}
                 </div>
 
-                <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-navy-600 hover:bg-navy-700 disabled:opacity-50"
-                >
-                    {isSubmitting ? 'Registering...' : 'Register as Super Admin'}
-                </button>
+                <div className="pt-4 border-t border-surface-200 mt-6">
+                    <h3 className="text-lg font-medium text-navy-900 mb-2">AI Backend Preference (Optional)</h3>
+                    <p className="text-sm text-text-500 mb-4">
+                        Choose how your AI features are powered. You can change this later in settings.
+                    </p>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-text-700 mb-1">Provider Type</label>
+                            <select
+                                {...register('aiProvider')}
+                                className="block w-full border border-surface-200 rounded-md py-2 px-3 focus:ring-navy-600 focus:border-navy-600 sm:text-sm"
+                            >
+                                <option value="managed">Managed by Movio (Default, Gemini)</option>
+                                <option value="byok_openrouter">Bring Your Own Key (OpenRouter)</option>
+                                <option value="byok_openai">Bring Your Own Key (OpenAI)</option>
+                                <option value="self_hosted">Self-Hosted (Ollama / Custom)</option>
+                            </select>
+                            {errors.aiProvider && <p className="mt-1 text-sm text-danger">{errors.aiProvider.message}</p>}
+                        </div>
+
+                        {/* API Key field (Visible for BYOK and Self-Hosted) */}
+                        <div className="space-y-1">
+                            <label className="block text-sm font-medium text-text-700">API Key</label>
+                            <input
+                                {...register('apiKey')}
+                                type="password"
+                                className="block w-full border border-surface-200 rounded-md py-2 px-3 focus:ring-navy-600 focus:border-navy-600 sm:text-sm"
+                                placeholder="sk-..."
+                            />
+                            <p className="text-xs text-text-500">Leaving this blank for 'Managed' uses Movio's quota.</p>
+                            {errors.apiKey && <p className="mt-1 text-sm text-danger">{errors.apiKey.message}</p>}
+                        </div>
+
+                        {/* Endpoint URL field (Visible for Self-Hosted) */}
+                        <div className="space-y-1">
+                            <label className="block text-sm font-medium text-text-700">Custom Endpoint URL</label>
+                            <input
+                                {...register('endpointUrl')}
+                                type="url"
+                                className="block w-full border border-surface-200 rounded-md py-2 px-3 focus:ring-navy-600 focus:border-navy-600 sm:text-sm"
+                                placeholder="https://your-ollama-instance.com/api/v1"
+                            />
+                            <p className="text-xs text-text-500">Required if using Self-Hosted.</p>
+                            {errors.endpointUrl && <p className="mt-1 text-sm text-danger">{errors.endpointUrl.message}</p>}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="pt-4">
+                    <button
+                        type="submit"
+                        disabled={isSubmitting}
+                        className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-navy-600 hover:bg-navy-700 disabled:opacity-50"
+                    >
+                        {isSubmitting ? 'Registering...' : 'Register as Super Admin'}
+                    </button>
+                </div>
             </form>
 
             <div className="mt-6 text-center text-sm">

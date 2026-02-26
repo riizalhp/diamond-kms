@@ -7,7 +7,11 @@ import { ContentStatus } from '@prisma/client'
 export async function getContentsAction(orgId: string, divisionId?: string) {
     try {
         const where: any = { organization_id: orgId }
-        if (divisionId) where.division_id = divisionId
+        if (divisionId === 'global') {
+            where.division_id = null
+        } else if (divisionId) {
+            where.division_id = divisionId
+        }
 
         const contents = await prisma.content.findMany({
             where,
@@ -63,11 +67,17 @@ export async function createContentAction(data: {
                 title: data.title,
                 body: data.body,
                 category: data.category || 'General',
-                organization_id: data.orgId,
-                division_id: data.divisionId,
                 author_id: data.authorId,
                 status: ContentStatus.DRAFT,
                 is_mandatory_read: data.isMandatory || false,
+                organization: {
+                    connect: { id: data.orgId }
+                },
+                ...(data.divisionId !== 'global' ? {
+                    division: {
+                        connect: { id: data.divisionId }
+                    }
+                } : {})
             }
         })
         revalidatePath('/dashboard/contents')

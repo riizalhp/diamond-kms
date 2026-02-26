@@ -50,52 +50,66 @@ export async function ragQuery(
         userRole === 'STAFF' ||
         (userRole === 'SUPERVISOR' && !crossDivisionEnabled)
 
-    // ── STEP 2: Embed the question ──────────────────────────────
     const ai = await getAIServiceForOrg(orgId)
-    const questionEmbedding = await ai.generateEmbedding(question)
-    const vectorStr = JSON.stringify(questionEmbedding)
 
-    // ── STEP 3: Cosine similarity search — top 8 chunks ─────────
-    const divisionFilter = scopedToDiv
-        ? `AND d.division_id = '${divisionId}'`
-        : ''
+    let relevantChunks: any[] = []
+    let context = ''
+    let embeddingFailed = false
 
-    const relevantChunks = await prisma.$queryRawUnsafe<
-        {
-            chunk_id: string
-            document_id: string
-            doc_title: string
-            content: string
-            similarity: number
-            page_start: number
-            page_end: number
-            division_name: string
-        }[]
-    >(
-        `SELECT
-      dc.id                                              AS chunk_id,
-      d.id                                               AS document_id,
-      COALESCE(d.ai_title, d.file_name)                  AS doc_title,
-      dc.content,
-      1 - (dc.embedding <=> $1::vector)                  AS similarity,
-      dc.page_number                                     AS page_start,
-      COALESCE(dc.page_end, dc.page_number)              AS page_end,
-      div.name                                           AS division_name
-    FROM document_chunks dc
-    JOIN documents  d   ON dc.document_id = d.id
-    JOIN divisions  div ON d.division_id  = div.id
-    WHERE d.organization_id = $2
-      AND d.is_processed   = true
-      AND dc.embedding IS NOT NULL
-      ${divisionFilter}
-    ORDER BY similarity DESC
-    LIMIT 8`,
-        vectorStr,
-        orgId
-    )
+    try {
+        // ── STEP 2: Embed the question ──────────────────────────────
+        const questionEmbedding = await ai.generateEmbedding(question)
+        const vectorStr = JSON.stringify(questionEmbedding)
+
+        // ── STEP 3: Cosine similarity search — top 8 chunks ─────────
+        const divisionFilter = scopedToDiv
+            ? `AND d.division_id = '${divisionId}'`
+            : ''
+
+        relevantChunks = await prisma.$queryRawUnsafe<
+            {
+                chunk_id: string
+                document_id: string
+                doc_title: string
+                content: string
+                similarity: number
+                page_start: number
+                page_end: number
+                division_name: string
+            }[]
+        >(
+            `SELECT
+          dc.id                                              AS chunk_id,
+          d.id                                               AS document_id,
+          COALESCE(d.ai_title, d.file_name)                  AS doc_title,
+          dc.content,
+          1 - (dc.embedding <=> $1::vector)                  AS similarity,
+          dc.page_number                                     AS page_start,
+          COALESCE(dc.page_end, dc.page_number)              AS page_end,
+          div.name                                           AS division_name
+        FROM document_chunks dc
+        JOIN documents  d   ON dc.document_id = d.id
+        JOIN divisions  div ON d.division_id  = div.id
+        WHERE d.organization_id = $2
+          AND d.is_processed   = true
+          AND dc.embedding IS NOT NULL
+          ${divisionFilter}
+        ORDER BY similarity DESC
+        LIMIT 8`,
+            vectorStr,
+            orgId
+        )
+
+        // Filter out chunks with very low similarity (e.g., < 0.3)
+        relevantChunks = relevantChunks.filter(c => c.similarity > 0.3)
+    } catch (error) {
+        console.warn('⚠️ [RAG] Embedding generation or vector search failed. Proceeding as general chat.', error?.toString())
+        embeddingFailed = true
+        relevantChunks = []
+    }
 
     // ── STEP 4: Build context string from chunks ────────────────
-    const context = relevantChunks
+    context = relevantChunks
         .map(
             (c, i) =>
                 `[Sumber ${i + 1}: ${c.doc_title}, Hal. ${c.page_start}${c.page_end !== c.page_start ? `-${c.page_end}` : ''}]\n${c.content}`
@@ -103,15 +117,24 @@ export async function ragQuery(
         .join('\n\n---\n\n')
 
     // ── STEP 5: Build system prompt ─────────────────────────────
-    const systemPrompt = `Anda adalah asisten pengetahuan cerdas untuk organisasi ini.
-Jawab pertanyaan HANYA berdasarkan dokumen yang diberikan dalam konteks di bawah ini.
-Jika informasi tidak ada di konteks, katakan "Informasi ini tidak ditemukan dalam dokumen yang tersedia."
-Selalu sebutkan sumber dengan format [Sumber N] ketika menggunakan informasi dari dokumen.
-Jawab dalam bahasa yang sama dengan pertanyaan (Indonesia atau Inggris).
-Gunakan formatting markdown jika diperlukan untuk kejelasan.
+    // Dynamic system prompt: if we have context, prioritize it. 
+    // If we don't, allow the AI to be a helpful general assistant instead of a strict document reader.
+    let systemPrompt = `Anda adalah asisten AI cerdas, luwes, dan ramah untuk karyawan di organisasi ini.`
+
+    if (context.trim()) {
+        systemPrompt += `\n\nTugas utama Anda adalah menjawab pertanyaan berdasarkan Kumpulan Dokumen di bawah ini.
+Aturan:
+1. Jika jawaban ada di dalam dokumen, JAWABLAH dengan mengandalkan data tersebut dan cantumkan sumbernya (format: [Sumber N]).
+2. Jika pertanyaan TIDAK ADA HUBUNGANNYA dengan dokumen (misalnya pengguna menyapa, bertanya kabar, atau bertanya hal umum sehari-hari), JAWABLAH SEPERTI BIASA layaknya asisten yang pintar. ANDA TIDAK PERLU BERKATA "Informasi tidak ditemukan di dokumen" untuk percakapan umum.
 
 KONTEKS DOKUMEN:
-${context || 'Tidak ada dokumen yang relevan ditemukan untuk pertanyaan ini.'}`
+${context}`
+    } else {
+        systemPrompt += `\n\nSaat ini tidak ada konteks dokumen internal spesifik yang ditemukan untuk pertanyaan pengguna. 
+Aturan:
+1. Anda bebas menjawab pertanyaan umum, berbincang ramah, atau merespons sapaan menggunakan pengetahuan luas Anda sendiri.
+2. JANGAN berkata "Informasi tidak ditemukan di dokumen" kecuali jika pengguna memang ngotot menanyakan file spesifik.`
+    }
 
     // ── STEP 6: Build prompt from history + new question ────────
     const historyText = history

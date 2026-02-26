@@ -44,7 +44,7 @@ export interface DocumentMetadata {
 
 /** Config stored in Organization.ai_provider_config (JSON column) */
 export interface AIProviderConfig {
-    provider: 'managed' | 'byok_openrouter' | 'byok_openai' | 'self_hosted'
+    provider: 'managed' | 'byok' | 'self_hosted'
     encryptedKey?: string   // AES-256-GCM encrypted API key (for byok/self_hosted)
     endpoint?: string       // Self-hosted endpoint URL
     chatModel?: string      // Model for chat/completion

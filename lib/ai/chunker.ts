@@ -20,14 +20,12 @@ function estimateTokens(text: string): number {
 
 /**
  * Chunk document into semantically meaningful segments
- * @param pages - Array of page texts
- * @param maxTokens - Target max tokens per chunk (default 400)
  * @param overlapTokens - Overlap between chunks for continuity (default 50)
  */
 export function chunkDocument(
     pages: PageText[],
-    maxTokens = 400,
-    overlapTokens = 50
+    maxTokens = 600,
+    overlapTokens = 80
 ): DocumentChunkData[] {
     const chunks: DocumentChunkData[] = []
     let currentText = ''

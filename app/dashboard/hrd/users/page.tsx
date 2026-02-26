@@ -48,7 +48,7 @@ export default function UsersPage() {
                         onClick={() => setIsInviteOpen(true)}
                         className="btn btn-primary"
                     >
-                        <Plus size={18} /> Invite User
+                        <Plus size={18} /> Buat User
                     </button>
                 </div>
 

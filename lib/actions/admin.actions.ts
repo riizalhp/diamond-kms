@@ -138,3 +138,138 @@ export async function updateOrganizationAction(orgId: string, data: {
         return { success: false, error: error.message }
     }
 }
+
+export async function updateOrgAIConfigAction(formData: FormData) {
+    try {
+        const orgId = formData.get('orgId') as string
+        if (!orgId) return { success: false, error: 'Organization ID is required' }
+
+        const provider = formData.get('provider') as string || 'managed'
+        const endpoint = formData.get('endpoint') as string | undefined
+        const apiKey = formData.get('apiKey') as string | undefined
+        const chatModel = formData.get('chatModel') as string | undefined
+        const embedModel = formData.get('embedModel') as string | undefined
+
+        // Build config
+        const aiConfig: any = { provider }
+        if (endpoint) {
+            let cleanEndpoint = endpoint.trim().replace(/\/+$/, '') // remove trailing slashes
+            // Attempt to auto-correct common Ollama mistakes (e.g. missing /v1)
+            // But only if it looks like an Ollama IP/host without path
+            if (provider === 'self_hosted' && !cleanEndpoint.endsWith('/v1') && !cleanEndpoint.includes('/api/')) {
+                cleanEndpoint += '/v1'
+            }
+            aiConfig.endpoint = cleanEndpoint
+        }
+        if (chatModel) aiConfig.chatModel = chatModel
+        if (embedModel) aiConfig.embedModel = embedModel
+
+        // Handle Encrypted Key
+        if (apiKey) {
+            const { encrypt } = await import('@/lib/security/key-encryptor')
+            aiConfig.encryptedKey = encrypt(apiKey)
+        } else {
+            // retain existing key ONLY if we are NOT switching to managed or self_hosted (which don't need it)
+            // or if the user explicitly wants to clear it, but here we assume empty means "keep existing" ONLY for byok
+            if (provider === 'byok') {
+                const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { ai_provider_config: true } })
+                const existingOpts = org?.ai_provider_config as any
+                if (existingOpts?.encryptedKey) {
+                    aiConfig.encryptedKey = existingOpts.encryptedKey
+                }
+            } else if (provider === 'self_hosted') {
+                // If setting to self_hosted and apiKey is blank, we explicitly clear it
+                // so we don't accidentally send Gemini/OpenAI keys to Ollama
+                aiConfig.encryptedKey = null
+            }
+        }
+
+        const autoSummaryChat = formData.get('autoSummaryChat') === 'true'
+        aiConfig.autoSummaryChat = autoSummaryChat
+
+        await prisma.organization.update({
+            where: { id: orgId },
+            data: {
+                ai_provider_config: aiConfig,
+            }
+        })
+
+        revalidatePath('/dashboard/hrd/ai-settings')
+        return { success: true }
+    } catch (error: any) {
+        return { success: false, error: error.message }
+    }
+}
+
+export async function getAvailableModelsAction(orgId: string, currentFormState: { provider: string, endpoint?: string, apiKey?: string }) {
+    try {
+        const { provider, endpoint, apiKey } = currentFormState
+
+        let fetchUrl = ''
+        let token = apiKey || ''
+
+        if (!token && provider !== 'managed') {
+            const org = await prisma.organization.findUnique({ where: { id: orgId }, select: { ai_provider_config: true } })
+            const config = org?.ai_provider_config as any
+            if (config?.encryptedKey) {
+                const { decrypt } = await import('@/lib/security/key-encryptor')
+                token = decrypt(config.encryptedKey)
+            }
+        }
+
+        if (provider === 'byok') {
+            if (!token) return { success: false, error: 'API key is required for BYOK' }
+            if (token.startsWith('sk-')) {
+                fetchUrl = 'https://api.openai.com/v1/models'
+            } else {
+                fetchUrl = 'https://generativelanguage.googleapis.com/v1beta/models'
+            }
+        } else if (provider === 'self_hosted') {
+            if (!endpoint) return { success: false, error: 'Endpoint is missing' }
+            const baseUrl = endpoint.replace(/\/chat\/completions\/?$/, '').replace(/\/v1\/?$/, '')
+            fetchUrl = `${baseUrl}/v1/models`
+        } else {
+            return { success: true, data: ['gemini-2.5-flash', 'gemini-1.5-pro', 'text-embedding-004'] }
+        }
+
+        const headers: Record<string, string> = {
+            'Content-Type': 'application/json'
+        }
+        if (token && token !== 'ollama-dummy-key') {
+            if (fetchUrl.includes('generativelanguage.googleapis.com')) {
+                headers['x-goog-api-key'] = token
+            } else {
+                headers['Authorization'] = `Bearer ${token}`
+            }
+        }
+
+        const res = await fetch(fetchUrl, { method: 'GET', headers })
+        if (!res.ok) {
+            const errText = await res.text()
+            throw new Error(`Failed: ${res.status} ${errText}`)
+        }
+
+        const data = await res.json()
+
+        let models: string[] = []
+        if (data.data && Array.isArray(data.data)) {
+            // OpenAI format
+            models = data.data.map((m: any) => m.id)
+        } else if (data.models && Array.isArray(data.models)) {
+            // Gemini format
+            const allGeminiModels = data.models.map((m: any) => m.name.replace('models/', ''))
+            // Filter to only include 1.5, 2.0, 2.5 versions and embedding models
+            models = allGeminiModels.filter((m: string) =>
+                m.includes('1.5') ||
+                m.includes('2.0') ||
+                m.includes('2.5') ||
+                m.includes('embedding')
+            )
+        }
+
+        return { success: true, data: models }
+
+    } catch (error: any) {
+        return { success: false, error: error.message || 'Failed to fetch models' }
+    }
+}

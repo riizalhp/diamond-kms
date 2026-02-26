@@ -4,6 +4,8 @@ import prisma from '@/lib/prisma'
 export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const orgId = searchParams.get('orgId')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const sort = searchParams.get('sort') || 'newest'
 
     if (!orgId) {
         return NextResponse.json({ success: false, error: 'Missing orgId' }, { status: 400 })
@@ -13,20 +15,17 @@ export async function GET(req: NextRequest) {
         const documents = await prisma.document.findMany({
             where: {
                 organization_id: orgId,
-                is_processed: true
             },
-            select: {
-                id: true,
-                file_name: true,
-                ai_title: true,
-                ai_summary: true,
-                division: { select: { id: true, name: true } }
+            include: {
+                division: { select: { id: true, name: true } },
             },
-            orderBy: { created_at: 'desc' }
+            orderBy: { created_at: sort === 'oldest' ? 'asc' : 'desc' },
+            take: limit,
         })
 
-        return NextResponse.json({ success: true, data: documents })
+        return NextResponse.json({ success: true, documents, data: documents })
     } catch (error: any) {
+        console.error('[DOCUMENTS API] Error:', error)
         return NextResponse.json({ success: false, error: error.message }, { status: 500 })
     }
 }

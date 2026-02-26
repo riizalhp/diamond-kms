@@ -54,6 +54,7 @@ model Organization {
   subscription_expires_at          DateTime?
   ai_provider_config               Json?
   cross_division_query_enabled     Boolean       @default(false)
+  auto_summary_chat                Boolean       @default(false)
   created_at                       DateTime      @default(now())
 
   users                            User[]
@@ -100,6 +101,7 @@ model User {
   user_points      UserPoints?
   notifications    Notification[]
   ai_usage_logs    AIUsageLog[]
+  chat_sessions    ChatSession[]
 
   @@map("users")
 }
@@ -151,6 +153,8 @@ model Document {
   ai_tags            String[]
   protection_config  Json?
   is_processed       Boolean         @default(false)
+  processing_status  String          @default("idle") // idle, processing, completed, failed
+  processing_log     Json?           // Array of {time, message, progress}
   embedding_model    String?         // 'text-embedding-004' | 'nomic-embed-text'
   embedding_version  Int             @default(0)
   processing_error   String?         @db.Text
@@ -185,7 +189,7 @@ model DocumentChunk {
 model Content {
   id                 String             @id @default(uuid())
   organization_id    String
-  division_id        String
+  division_id        String?
   author_id          String
   title              String
   body               String             @db.Text
@@ -197,7 +201,7 @@ model Content {
   published_at       DateTime?
 
   organization       Organization       @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  division           Division           @relation(fields: [division_id], references: [id], onDelete: Cascade)
+  division           Division?          @relation(fields: [division_id], references: [id], onDelete: Cascade)
   versions           ContentVersion[]
   approval_queues    ApprovalQueue[]
   suggestions        RevisionSuggestion[]
@@ -417,4 +421,35 @@ model AIUsageLog {
   @@index([organization_id])
   @@index([user_id])
   @@map("ai_usage_logs")
+}
+
+model ChatSession {
+  id              String        @id @default(uuid())
+  user_id         String
+  organization_id String
+  title           String        @default("New Chat")
+  summary         String?       @db.Text
+  created_at      DateTime      @default(now())
+  updated_at      DateTime      @default(now()) @updatedAt
+
+  user            User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  messages        ChatMessage[]
+
+  @@index([user_id])
+  @@index([organization_id])
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id              String      @id @default(uuid())
+  session_id      String
+  role            String      // 'user' | 'assistant'
+  content         String      @db.Text
+  citations       Json?
+  created_at      DateTime    @default(now())
+
+  session         ChatSession @relation(fields: [session_id], references: [id], onDelete: Cascade)
+
+  @@index([session_id])
+  @@map("chat_messages")
 }

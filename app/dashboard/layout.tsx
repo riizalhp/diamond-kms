@@ -56,6 +56,7 @@ const getNavLinks = (role?: string) => {
             { label: 'Divisions', href: '/dashboard/hrd/divisions' },
             { label: 'Billing', href: '/dashboard/hrd/billing' },
             { label: 'AI Usage', href: '/dashboard/hrd/ai-usage' },
+            { label: 'AI Settings', href: '/dashboard/hrd/ai-settings' },
             { label: 'Settings', href: '/dashboard/hrd/settings' },
         ]
     }

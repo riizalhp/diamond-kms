@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { getDocumentsAction, deleteDocumentAction } from '@/lib/actions/document.actions'
 import { getDivisionsAction } from '@/lib/actions/user.actions'
-import { Search, Upload, Trash2, FileText, FileSpreadsheet, FileArchive, Eye, Bot, CheckCircle, Clock, Filter } from 'lucide-react'
+import { Search, Filter, FileText, FolderOpen, MoreVertical, Eye, Trash2, CheckCircle, Clock, Loader2, AlertCircle, FileSpreadsheet, FileArchive, Upload } from 'lucide-react'
 import Link from 'next/link'
 
 const getFileIcon = (mimeType: string) => {
@@ -40,6 +40,18 @@ export default function DocumentsPage() {
     }
 
     useEffect(() => { loadData() }, [organization?.id, filterDiv])
+
+    // Auto-poll if there are any unprocessed documents to show progress
+    useEffect(() => {
+        const hasProcessing = documents.some(d => !d.is_processed && d.processing_status !== 'failed')
+        if (!hasProcessing) return
+
+        const poll = setInterval(() => {
+            loadData()
+        }, 5000)
+
+        return () => clearInterval(poll)
+    }, [documents, organization?.id, filterDiv])
 
     const handleDelete = async (id: string) => {
         if (!confirm('Delete this document permanently?')) return
@@ -147,6 +159,14 @@ export default function DocumentsPage() {
                                                 <span className="chip bg-success-bg text-success">
                                                     <CheckCircle size={12} /> Processed
                                                 </span>
+                                            ) : doc.processing_status === 'processing' ? (
+                                                <span className="chip bg-amber-100 text-amber-800">
+                                                    <Loader2 size={12} className="animate-spin" /> Processing
+                                                </span>
+                                            ) : doc.processing_status === 'failed' ? (
+                                                <span className="chip bg-danger-bg text-danger">
+                                                    <AlertCircle size={12} /> Failed
+                                                </span>
                                             ) : (
                                                 <span className="chip bg-warning-bg text-warning">
                                                     <Clock size={12} /> Pending
@@ -156,9 +176,9 @@ export default function DocumentsPage() {
                                     </div>
 
                                     <div className="border-t border-surface-200 bg-surface-50 p-4 flex justify-between items-center gap-2">
-                                        <Link href={`/dashboard/documents/${doc.id}`} className="btn btn-primary flex-1 justify-center text-sm">
+                                        <a href={`/dashboard/documents/${doc.id}`} className="btn btn-primary flex-1 justify-center text-sm">
                                             <Eye size={14} /> View
-                                        </Link>
+                                        </a>
                                         {['SUPER_ADMIN', 'GROUP_ADMIN'].includes(role || '') && (
                                             <button
                                                 onClick={() => handleDelete(doc.id)}

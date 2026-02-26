@@ -3,6 +3,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import type { AIService, DocumentMetadata } from '../types'
 import { logger } from '@/lib/logging/redact'
+import { withRetry } from '../utils'
 
 export class GeminiService implements AIService {
     readonly providerName = 'google-gemini'
@@ -18,9 +19,11 @@ export class GeminiService implements AIService {
 
     // ─── Embedding ──────────────────────────────────────────────
     async generateEmbedding(text: string): Promise<number[]> {
-        const model = this.genAI.getGenerativeModel({ model: this.embeddingModel })
-        const result = await model.embedContent(text)
-        return result.embedding.values // 768-dimensional float array
+        return withRetry(async () => {
+            const model = this.genAI.getGenerativeModel({ model: this.embeddingModel })
+            const result = await model.embedContent(text)
+            return result.embedding.values // 768-dimensional float array
+        })
     }
 
     // ─── Completion ─────────────────────────────────────────────
@@ -28,18 +31,20 @@ export class GeminiService implements AIService {
         prompt: string,
         options?: { systemPrompt?: string; maxTokens?: number; jsonMode?: boolean }
     ): Promise<string> {
-        const model = this.genAI.getGenerativeModel({
-            model: this.chatModel,
-            generationConfig: {
-                maxOutputTokens: options?.maxTokens ?? 2048,
-                responseMimeType: options?.jsonMode ? 'application/json' : 'text/plain',
-            },
-            ...(options?.systemPrompt && {
-                systemInstruction: options.systemPrompt,
-            }),
+        return withRetry(async () => {
+            const model = this.genAI.getGenerativeModel({
+                model: this.chatModel,
+                generationConfig: {
+                    maxOutputTokens: options?.maxTokens ?? 2048,
+                    responseMimeType: options?.jsonMode ? 'application/json' : 'text/plain',
+                },
+                ...(options?.systemPrompt && {
+                    systemInstruction: options.systemPrompt,
+                }),
+            })
+            const result = await model.generateContent(prompt)
+            return result.response.text()
         })
-        const result = await model.generateContent(prompt)
-        return result.response.text()
     }
 
     // ─── Streaming ──────────────────────────────────────────────

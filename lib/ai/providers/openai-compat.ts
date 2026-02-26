@@ -3,6 +3,7 @@
 import OpenAI from 'openai'
 import type { AIService, DocumentMetadata } from '../types'
 import { logger } from '@/lib/logging/redact'
+import { withRetry } from '../utils'
 
 export interface OpenAICompatConfig {
     baseURL: string      // 'https://openrouter.ai/api/v1' or Olla endpoint
@@ -34,32 +35,62 @@ export class OpenAICompatService implements AIService {
     }
 
     async generateEmbedding(text: string): Promise<number[]> {
-        const response = await this.client.embeddings.create({
-            model: this.embeddingModel,
-            input: text,
+        return withRetry(async () => {
+            try {
+                // console.log(`[AI-SELFHOSTED] Generating embedding for text length: ${text.length}`)
+                const response = await this.client.embeddings.create({
+                    model: this.embeddingModel,
+                    input: text,
+                })
+                const embedding = response.data[0]?.embedding
+                if (!embedding) throw new Error('No embedding returned from provider')
+                return embedding
+            } catch (err: any) {
+                // If the provider doesn't support embeddings (like Olla), fallback to Gemini
+                if (err.status === 404 || err.message?.includes('404')) {
+                    logger.warn(`Provider ${this.providerName} doesn't support embeddings, falling back to Gemini.`)
+                    console.log(`[AI-SELFHOSTED] Fallback to Gemini for embeddings`)
+                    const { env } = await import('@/lib/env')
+                    if (!env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY required for fallback embeddings')
+                    const { GoogleGenerativeAI } = await import('@google/generative-ai')
+                    const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY)
+                    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' })
+                    const res = await model.embedContent(text)
+                    return res.embedding.values
+                }
+                console.error(`[AI-SELFHOSTED] Embedding Error:`, err.message)
+                throw err
+            }
         })
-        const embedding = response.data[0]?.embedding
-        if (!embedding) throw new Error('No embedding returned from provider')
-        return embedding
     }
 
     async generateCompletion(
         prompt: string,
         options?: { systemPrompt?: string; maxTokens?: number; jsonMode?: boolean }
     ): Promise<string> {
-        const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = []
-        if (options?.systemPrompt) {
-            messages.push({ role: 'system', content: options.systemPrompt })
-        }
-        messages.push({ role: 'user', content: prompt })
+        return withRetry(async () => {
+            console.log(`[AI-SELFHOSTED] Generating completion. Model: ${this.chatModel}, Prompt length: ${prompt.length}`)
+            const startTime = Date.now()
+            const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = []
+            if (options?.systemPrompt) {
+                messages.push({ role: 'system', content: options.systemPrompt })
+            }
+            messages.push({ role: 'user', content: prompt })
 
-        const response = await this.client.chat.completions.create({
-            model: this.chatModel,
-            max_tokens: options?.maxTokens ?? 2048,
-            response_format: options?.jsonMode ? { type: 'json_object' } : undefined,
-            messages,
+            try {
+                const response = await this.client.chat.completions.create({
+                    model: this.chatModel,
+                    max_tokens: options?.maxTokens ?? 2048,
+                    response_format: options?.jsonMode ? { type: 'json_object' } : undefined,
+                    messages,
+                })
+                console.log(`[AI-SELFHOSTED] Completion finished in ${Date.now() - startTime}ms`)
+                return response.choices[0]?.message.content ?? ''
+            } catch (err: any) {
+                console.error(`[AI-SELFHOSTED] Completion Error after ${Date.now() - startTime}ms:`, err.message)
+                throw err
+            }
         })
-        return response.choices[0]?.message.content ?? ''
     }
 
     async streamCompletion(
@@ -89,8 +120,10 @@ export class OpenAICompatService implements AIService {
         input: { text?: string; fileBuffer?: Buffer; fileName: string }
     ): Promise<DocumentMetadata> {
         const content = input.text ?? `[File: ${input.fileName}]`
+        const safeContent = content.slice(0, 2500)
+        console.log(`[AI-SELFHOSTED] Generating metadata for document: ${input.fileName}, text length: ${safeContent.length}`)
         const raw = await this.generateCompletion(
-            `Document content:\n${content.slice(0, 8000)}`,
+            `Document content:\n${safeContent}`,
             {
                 systemPrompt:
                     'You analyze documents. Return ONLY valid JSON with fields: title (string, max 80 chars), summary (string, 2-3 paragraphs), tags (string array, 5 items), language ("id"|"en"|"mixed"), docType ("sop"|"policy"|"guide"|"report"|"regulation"|"other")',
@@ -99,9 +132,12 @@ export class OpenAICompatService implements AIService {
         )
 
         try {
-            return JSON.parse(raw) as DocumentMetadata
+            const parsed = JSON.parse(raw) as DocumentMetadata
+            console.log(`[AI-SELFHOSTED] Metadata parse SUCCESS:`, parsed.title)
+            return parsed
         } catch (parseError) {
             logger.error('Failed to parse metadata response:', raw)
+            console.log(`[AI-SELFHOSTED] Metadata parse FAILED. Raw output:`, raw.substring(0, 100))
             return {
                 title: input.fileName.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
                 summary: content.slice(0, 200),

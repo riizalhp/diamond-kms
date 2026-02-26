@@ -17,33 +17,30 @@ export function getAIService(config: AIProviderConfig): AIService {
             return new GeminiService(key, config.chatModel ?? 'gemini-2.5-flash')
         }
 
-        case 'byok_openrouter': {
-            if (!config.encryptedKey) throw new Error('OpenRouter API key not configured')
-            return new OpenAICompatService({
-                baseURL: 'https://openrouter.ai/api/v1',
-                apiKey: decrypt(config.encryptedKey),
-                chatModel: config.chatModel ?? 'google/gemini-2.5-flash',
-                embedModel: config.embedModel ?? 'text-embedding-004',
-                providerName: 'openrouter',
-            })
-        }
-
-        case 'byok_openai': {
-            if (!config.encryptedKey) throw new Error('OpenAI API key not configured')
-            return new OpenAICompatService({
-                baseURL: 'https://api.openai.com/v1',
-                apiKey: decrypt(config.encryptedKey),
-                chatModel: config.chatModel ?? 'gpt-4o-mini',
-                embedModel: config.embedModel ?? 'text-embedding-3-small',
-                providerName: 'openai',
-            })
+        case 'byok': {
+            if (!config.encryptedKey) throw new Error('API key not configured for BYOK')
+            const byokKey = decrypt(config.encryptedKey)
+            // Auto-detect: OpenAI keys start with 'sk-'
+            if (byokKey.startsWith('sk-')) {
+                return new OpenAICompatService({
+                    baseURL: 'https://api.openai.com/v1',
+                    apiKey: byokKey,
+                    chatModel: config.chatModel ?? 'gpt-4o-mini',
+                    embedModel: config.embedModel ?? 'text-embedding-3-small',
+                    providerName: 'openai',
+                })
+            } else {
+                return new GeminiService(byokKey, config.chatModel ?? 'gemini-2.5-flash')
+            }
         }
 
         case 'self_hosted': {
-            if (!config.encryptedKey) throw new Error('Self-hosted API key not configured')
+            // Ollama often doesn't need an API key, so we make it optional
+            const apiKey = config.encryptedKey ? decrypt(config.encryptedKey) : 'ollama-dummy-key'
+
             return new OpenAICompatService({
                 baseURL: config.endpoint ?? OLLA_DEFAULT,
-                apiKey: decrypt(config.encryptedKey),
+                apiKey,
                 chatModel: config.chatModel ?? 'llama3.3:70b',
                 embedModel: config.embedModel ?? 'nomic-embed-text',
                 providerName: 'ollama-olla',

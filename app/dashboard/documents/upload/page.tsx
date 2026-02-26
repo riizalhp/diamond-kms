@@ -1,12 +1,34 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { getDivisionsAction } from '@/lib/actions/user.actions'
 import { createDocumentAction } from '@/lib/actions/document.actions'
-import { ArrowLeft, Upload, FileText, CheckCircle, Loader2, Bot, Sparkles } from 'lucide-react'
+import {
+    ArrowLeft, Upload, FileText, CheckCircle, Loader2, Bot,
+    Sparkles, ChevronDown, ChevronUp, AlertTriangle, RefreshCcw, Eye
+} from 'lucide-react'
 import Link from 'next/link'
+
+interface ProcessingLogEntry {
+    time: string
+    message: string
+    progress: number
+}
+
+interface RecentDoc {
+    id: string
+    file_name: string
+    processing_status: string
+    processing_log: ProcessingLogEntry[] | null
+    is_processed: boolean
+    processing_error: string | null
+    ai_title: string | null
+    ai_summary: string | null
+    ai_tags: string[] | null
+    created_at: string
+}
 
 export default function UploadDocumentPage() {
     const router = useRouter()
@@ -18,10 +40,13 @@ export default function UploadDocumentPage() {
     const [file, setFile] = useState<File | null>(null)
     const [dragOver, setDragOver] = useState(false)
     const [uploading, setUploading] = useState(false)
-    const [processing, setProcessing] = useState(false)
-    const [step, setStep] = useState<'select' | 'uploading' | 'processing' | 'done'>('select')
-    const [result, setResult] = useState<any>(null)
     const [error, setError] = useState('')
+
+    // Recent uploads state
+    const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([])
+    const [expandedDocId, setExpandedDocId] = useState<string | null>(null)
+    const [loadingRecent, setLoadingRecent] = useState(true)
+    const pollingRef = useRef<NodeJS.Timeout | null>(null)
 
     useEffect(() => {
         if (organization?.id) {
@@ -31,8 +56,60 @@ export default function UploadDocumentPage() {
                     if (res.data.length > 0) setDivisionId(res.data[0].id)
                 }
             })
+            loadRecentUploads()
         }
     }, [organization?.id])
+
+    // Load recent uploads from API
+    const loadRecentUploads = useCallback(async () => {
+        if (!organization?.id) return
+        setLoadingRecent(true)
+        try {
+            const res = await fetch(`/api/documents?orgId=${organization.id}&limit=10&sort=newest`)
+            if (res.ok) {
+                const data = await res.json()
+                const docs = (data.documents || []).filter(
+                    (d: any) => d.processing_status !== 'idle' || !d.is_processed
+                )
+                setRecentDocs(docs)
+            }
+        } catch { /* ignore */ }
+        setLoadingRecent(false)
+    }, [organization?.id])
+
+    // Poll for processing documents
+    useEffect(() => {
+        const needsPolling = recentDocs.some(d => !d.is_processed && d.processing_status !== 'failed');
+        if (needsPolling) {
+            pollingRef.current = setInterval(async () => {
+                const pollingDocs = recentDocs.filter(d => !d.is_processed && d.processing_status !== 'failed');
+                const updates = await Promise.all(
+                    pollingDocs.map(async (d) => {
+                        try {
+                            const res = await fetch(`/api/documents/${d.id}/status`)
+                            if (res.ok) {
+                                const data = await res.json()
+                                return data.document as RecentDoc
+                            }
+                        } catch { /* ignore */ }
+                        return null
+                    })
+                )
+
+                setRecentDocs(prev => prev.map(d => {
+                    const updated = updates.find(u => u && u.id === d.id)
+                    return updated || d
+                }))
+            }, 3000)
+        }
+
+        return () => {
+            if (pollingRef.current) {
+                clearInterval(pollingRef.current)
+                pollingRef.current = null
+            }
+        }
+    }, [recentDocs])
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault()
@@ -49,7 +126,6 @@ export default function UploadDocumentPage() {
     const handleUpload = async () => {
         if (!file || !user?.id || !organization?.id || !divisionId) return
         setError('')
-        setStep('uploading')
         setUploading(true)
 
         try {
@@ -67,12 +143,11 @@ export default function UploadDocumentPage() {
 
             if (uploadError) {
                 setError(`Upload gagal: ${uploadError.message}`)
-                setStep('select')
                 setUploading(false)
                 return
             }
 
-            // Step 2: Create document record in DB with the actual storage path
+            // Step 2: Create document record in DB
             const docRes = await createDocumentAction({
                 fileName: file.name,
                 filePath: storagePath,
@@ -84,66 +159,82 @@ export default function UploadDocumentPage() {
             })
 
             if (!docRes.success) {
-                setError(docRes.error || 'Failed to create document record')
-                setStep('select')
+                setError(docRes.error || 'Gagal membuat record dokumen')
                 setUploading(false)
                 return
             }
 
-            setUploading(false)
-            setStep('processing')
-            setProcessing(true)
-
-            // Step 3: Trigger real AI processing via API
-            const processResponse = await fetch('/api/ai/process-document', {
+            // Step 3: Trigger AI processing as FIRE-AND-FORGET
+            // Don't await — just trigger and let it run server-side
+            fetch('/api/ai/process-document', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'x-internal-secret': 'diamond-kms-cron-secret-2026',
                 },
                 body: JSON.stringify({ documentId: docRes.data!.id }),
-            })
+            }).catch(() => { /* fire and forget */ })
 
-            const processResult = await processResponse.json()
-
-            if (!processResponse.ok || !processResult.success) {
-                setError(processResult.error || 'AI processing failed')
-                setStep('select')
-                setProcessing(false)
-                return
+            // Add to recent docs immediately
+            const newDoc: RecentDoc = {
+                id: docRes.data!.id,
+                file_name: file.name,
+                processing_status: 'processing',
+                processing_log: [{ time: new Date().toISOString(), message: 'Memulai proses...', progress: 5 }],
+                is_processed: false,
+                processing_error: null,
+                ai_title: null,
+                ai_summary: null,
+                ai_tags: null,
+                created_at: new Date().toISOString(),
             }
+            setRecentDocs(prev => [newDoc, ...prev])
+            setExpandedDocId(docRes.data!.id)
 
-            // Step 4: Fetch updated document with AI metadata
-            const { getDocumentByIdAction } = await import('@/lib/actions/document.actions')
-            const updatedDoc = await getDocumentByIdAction(docRes.data!.id)
-
-            if (updatedDoc.success && updatedDoc.data) {
-                setResult({
-                    docId: docRes.data!.id,
-                    title: updatedDoc.data.ai_title || file.name,
-                    summary: updatedDoc.data.ai_summary || 'Processing complete',
-                    tags: updatedDoc.data.ai_tags || [],
-                    chunks: processResult.data?.chunks || 0,
-                })
-            } else {
-                setResult({
-                    docId: docRes.data!.id,
-                    title: file.name,
-                    summary: 'Document processed successfully',
-                    tags: ['document'],
-                    chunks: processResult.data?.chunks || 0,
-                })
-            }
-
-            setStep('done')
-            setProcessing(false)
-        } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : 'Upload failed'
-            setError(message)
-            setStep('select')
+            // Reset upload form
+            setFile(null)
             setUploading(false)
-            setProcessing(false)
+
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : 'Upload gagal'
+            setError(message)
+            setUploading(false)
         }
+    }
+
+    const getStatusBadge = (doc: RecentDoc) => {
+        switch (doc.processing_status) {
+            case 'processing':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                        <Loader2 size={12} className="animate-spin" /> Memproses
+                    </span>
+                )
+            case 'completed':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                        <CheckCircle size={12} /> Selesai
+                    </span>
+                )
+            case 'failed':
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                        <AlertTriangle size={12} /> Gagal
+                    </span>
+                )
+            default:
+                return (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-surface-100 text-text-500">
+                        Menunggu
+                    </span>
+                )
+        }
+    }
+
+    const getLatestProgress = (doc: RecentDoc): number => {
+        if (doc.processing_status === 'completed') return 100
+        if (!doc.processing_log || doc.processing_log.length === 0) return 0
+        return doc.processing_log[doc.processing_log.length - 1].progress || 0
     }
 
     return (
@@ -155,6 +246,7 @@ export default function UploadDocumentPage() {
                 <h1 className="text-2xl font-bold font-display text-navy-900">Upload Document</h1>
             </div>
 
+            {/* Upload Form Card */}
             <div className="card p-8">
                 {error && (
                     <div className="p-4 rounded-md mb-6 text-sm font-medium bg-danger-bg text-danger border border-red-200">
@@ -162,135 +254,245 @@ export default function UploadDocumentPage() {
                     </div>
                 )}
 
-                {step === 'select' && (
-                    <div className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="block text-sm font-medium text-text-700">Target Division <span className="text-danger">*</span></label>
-                            <select
-                                value={divisionId}
-                                onChange={(e) => setDivisionId(e.target.value)}
-                                className="w-full border-surface-200 border rounded-md p-2.5 focus:ring-navy-600 focus:border-navy-600 bg-white"
-                            >
-                                {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                            </select>
-                        </div>
-
-                        <div
-                            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-                            onDragLeave={() => setDragOver(false)}
-                            onDrop={handleDrop}
-                            className={`border-2 border-dashed rounded-xl p-12 text-center transition-all cursor-pointer ${dragOver ? 'border-navy-600 bg-navy-50' :
-                                file ? 'border-success bg-success-bg' :
-                                    'border-surface-300 hover:border-navy-400 hover:bg-surface-50'
-                                }`}
-                            onClick={() => document.getElementById('file-input')?.click()}
+                <div className="space-y-6">
+                    <div className="space-y-2">
+                        <label className="block text-sm font-medium text-text-700">Target Division <span className="text-danger">*</span></label>
+                        <select
+                            value={divisionId}
+                            onChange={(e) => setDivisionId(e.target.value)}
+                            className="w-full border-surface-200 border rounded-md p-2.5 focus:ring-navy-600 focus:border-navy-600 bg-white"
                         >
-                            <input
-                                id="file-input"
-                                type="file"
-                                className="hidden"
-                                accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.pptx"
-                                onChange={handleFileChange}
-                            />
+                            {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                        </select>
+                    </div>
 
-                            {file ? (
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="w-14 h-14 bg-success-bg text-success rounded-full flex items-center justify-center">
-                                        <CheckCircle size={28} />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-navy-900">{file.name}</p>
-                                        <p className="text-sm text-text-500 mt-1">{(file.size / 1024).toFixed(1)} KB • {file.type || 'Unknown type'}</p>
-                                    </div>
-                                    <p className="text-xs text-text-300 mt-2">Click to change file</p>
+                    <div
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={handleDrop}
+                        className={`border-2 border-dashed rounded-xl p-12 text-center transition-all cursor-pointer ${dragOver ? 'border-navy-600 bg-navy-50' :
+                            file ? 'border-success bg-success-bg' :
+                                'border-surface-300 hover:border-navy-400 hover:bg-surface-50'
+                            }`}
+                        onClick={() => document.getElementById('file-input')?.click()}
+                    >
+                        <input
+                            id="file-input"
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.txt,.md,.csv,.xlsx,.pptx"
+                            onChange={handleFileChange}
+                        />
+
+                        {file ? (
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-14 h-14 bg-success-bg text-success rounded-full flex items-center justify-center">
+                                    <CheckCircle size={28} />
                                 </div>
+                                <div>
+                                    <p className="font-bold text-navy-900">{file.name}</p>
+                                    <p className="text-sm text-text-500 mt-1">{(file.size / 1024).toFixed(1)} KB • {file.type || 'Unknown type'}</p>
+                                </div>
+                                <p className="text-xs text-text-300 mt-2">Klik untuk ganti file</p>
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center gap-3">
+                                <div className="w-14 h-14 bg-surface-100 text-text-300 rounded-full flex items-center justify-center">
+                                    <Upload size={28} />
+                                </div>
+                                <div>
+                                    <p className="font-bold text-navy-900">Drop file di sini atau klik untuk browse</p>
+                                    <p className="text-sm text-text-500 mt-1">PDF, Word, Excel, PowerPoint, TXT, Markdown, CSV</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                        <p className="text-xs text-text-400">
+                            💡 Anda bisa meninggalkan halaman ini setelah upload — proses AI akan tetap berjalan di background.
+                        </p>
+                        <button
+                            onClick={handleUpload}
+                            disabled={!file || !divisionId || uploading}
+                            className="btn btn-primary shadow-md disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {uploading ? (
+                                <><Loader2 size={16} className="animate-spin" /> Mengunggah...</>
                             ) : (
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="w-14 h-14 bg-surface-100 text-text-300 rounded-full flex items-center justify-center">
-                                        <Upload size={28} />
-                                    </div>
-                                    <div>
-                                        <p className="font-bold text-navy-900">Drop a file here or click to browse</p>
-                                        <p className="text-sm text-text-500 mt-1">PDF, Word, Excel, PowerPoint, TXT, Markdown, CSV</p>
-                                    </div>
-                                </div>
+                                <><Upload size={16} /> Upload & Process</>
                             )}
-                        </div>
-
-                        <div className="flex justify-end">
-                            <button
-                                onClick={handleUpload}
-                                disabled={!file || !divisionId}
-                                className="btn btn-primary shadow-md disabled:opacity-50"
-                            >
-                                <Upload size={16} /> Upload & Process with AI
-                            </button>
-                        </div>
+                        </button>
                     </div>
-                )}
+                </div>
+            </div>
 
-                {(step === 'uploading' || step === 'processing') && (
-                    <div className="flex flex-col items-center justify-center py-16 text-center space-y-6">
-                        <div className="relative">
-                            <div className="w-20 h-20 border-4 border-navy-200 border-t-navy-600 rounded-full animate-spin" />
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                {step === 'uploading' ? <Upload size={24} className="text-navy-600" /> : <Bot size={24} className="text-navy-600" />}
-                            </div>
-                        </div>
-                        <div>
-                            <h3 className="text-xl font-bold font-display text-navy-900">
-                                {step === 'uploading' ? 'Uploading Document...' : 'AI Processing...'}
-                            </h3>
-                            <p className="text-text-500 mt-2 max-w-md">
-                                {step === 'uploading'
-                                    ? 'Your file is being uploaded to the secure repository.'
-                                    : 'Our AI is reading your document, generating a smart title, summary, tags, and splitting it into searchable chunks.'}
-                            </p>
-                        </div>
+            {/* Recent Uploads Section */}
+            <div className="card">
+                <div className="p-5 border-b border-surface-200 flex items-center justify-between">
+                    <h2 className="text-lg font-bold font-display text-navy-900 flex items-center gap-2">
+                        <Bot size={20} className="text-navy-600" />
+                        Proses Upload Terbaru
+                    </h2>
+                    <button
+                        onClick={loadRecentUploads}
+                        className="text-text-400 hover:text-navy-600 transition p-1.5 rounded hover:bg-surface-100"
+                        title="Refresh"
+                    >
+                        <RefreshCcw size={16} />
+                    </button>
+                </div>
+
+                {loadingRecent ? (
+                    <div className="p-8 text-center">
+                        <Loader2 size={24} className="animate-spin text-navy-400 mx-auto" />
+                        <p className="text-sm text-text-400 mt-2">Memuat...</p>
                     </div>
-                )}
+                ) : recentDocs.length === 0 ? (
+                    <div className="p-8 text-center text-text-400">
+                        <FileText size={32} className="mx-auto mb-2 text-surface-300" />
+                        <p className="text-sm">Belum ada upload terbaru</p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-surface-100">
+                        {recentDocs.map(doc => (
+                            <div key={doc.id} className="group">
+                                {/* Row */}
+                                <div
+                                    className="flex items-center gap-4 p-4 hover:bg-surface-50 cursor-pointer transition"
+                                    onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
+                                >
+                                    <div className="w-10 h-10 bg-navy-100 rounded-lg flex items-center justify-center shrink-0">
+                                        {doc.processing_status === 'processing' ? (
+                                            <Loader2 size={18} className="text-navy-600 animate-spin" />
+                                        ) : doc.processing_status === 'completed' ? (
+                                            <Sparkles size={18} className="text-navy-600" />
+                                        ) : doc.processing_status === 'failed' ? (
+                                            <AlertTriangle size={18} className="text-red-500" />
+                                        ) : (
+                                            <FileText size={18} className="text-navy-600" />
+                                        )}
+                                    </div>
 
-                {step === 'done' && result && (
-                    <div className="space-y-6">
-                        <div className="flex flex-col items-center text-center py-6">
-                            <div className="w-16 h-16 bg-success-bg text-success rounded-full flex items-center justify-center mb-4">
-                                <Sparkles size={32} />
-                            </div>
-                            <h3 className="text-2xl font-bold font-display text-navy-900">Document Processed!</h3>
-                            <p className="text-text-500 mt-2">AI has analyzed your document and extracted the following information.</p>
-                        </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-medium text-navy-900 truncate text-sm">
+                                            {doc.ai_title || doc.file_name}
+                                        </p>
+                                        <div className="flex items-center gap-3 mt-1">
+                                            {getStatusBadge(doc)}
+                                            <span className="text-xs text-text-400">
+                                                {new Date(doc.created_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                                            </span>
+                                        </div>
+                                    </div>
 
-                        <div className="bg-surface-50 border border-surface-200 rounded-lg p-6 space-y-4">
-                            <div>
-                                <span className="text-xs font-semibold uppercase text-text-300 tracking-wider">AI-Generated Title</span>
-                                <p className="font-bold text-navy-900 text-lg mt-1">{result.title}</p>
-                            </div>
-                            <div>
-                                <span className="text-xs font-semibold uppercase text-text-300 tracking-wider">AI Summary</span>
-                                <p className="text-text-700 mt-1 leading-relaxed">{result.summary}</p>
-                            </div>
-                            <div>
-                                <span className="text-xs font-semibold uppercase text-text-300 tracking-wider">Tags</span>
-                                <div className="flex flex-wrap gap-2 mt-2">
-                                    {result.tags.map((tag: string, i: number) => (
-                                        <span key={i} className="badge bg-navy-100 text-navy-700">{tag}</span>
-                                    ))}
+                                    {/* Progress mini bar */}
+                                    {(!doc.is_processed && doc.processing_status !== 'failed') && (
+                                        <div className="w-24 space-y-1 shrink-0">
+                                            <div className="w-full bg-surface-200 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="bg-navy-600 h-1.5 rounded-full transition-all duration-500"
+                                                    style={{ width: `${getLatestProgress(doc)}%` }}
+                                                />
+                                            </div>
+                                            <p className="text-[10px] text-text-400 text-right">{getLatestProgress(doc)}%</p>
+                                        </div>
+                                    )}
+
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {doc.processing_status === 'completed' && (
+                                            <Link
+                                                href={`/dashboard/documents/${doc.id}`}
+                                                className="text-navy-600 hover:text-navy-700 p-1.5 rounded hover:bg-navy-100 transition"
+                                                onClick={(e) => e.stopPropagation()}
+                                                title="Lihat Dokumen"
+                                            >
+                                                <Eye size={16} />
+                                            </Link>
+                                        )}
+                                        {expandedDocId === doc.id ? (
+                                            <ChevronUp size={16} className="text-text-400" />
+                                        ) : (
+                                            <ChevronDown size={16} className="text-text-400" />
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <span className="text-xs font-semibold uppercase text-text-300 tracking-wider">Chunks Created</span>
-                                <p className="text-text-700 mt-1">{result.chunks} searchable chunk(s)</p>
-                            </div>
-                        </div>
 
-                        <div className="flex justify-end gap-3 pt-4 border-t">
-                            <button onClick={() => { setFile(null); setStep('select'); setResult(null) }} className="btn btn-secondary">
-                                Upload Another
-                            </button>
-                            <Link href={`/dashboard/documents/${result.docId}`} className="btn btn-primary">
-                                View Document
-                            </Link>
-                        </div>
+                                {/* Expanded Detail */}
+                                {expandedDocId === doc.id && (
+                                    <div className="px-4 pb-4 ml-14 space-y-3">
+                                        {/* Progress Bar */}
+                                        {(!doc.is_processed && doc.processing_status !== 'failed') && (
+                                            <div className="space-y-1.5">
+                                                <div className="flex justify-between text-xs font-medium">
+                                                    <span className="text-navy-900">Progress</span>
+                                                    <span className="text-navy-600">{getLatestProgress(doc)}%</span>
+                                                </div>
+                                                <div className="w-full bg-surface-200 rounded-full h-2 overflow-hidden">
+                                                    <div
+                                                        className="bg-navy-600 h-2 rounded-full transition-all duration-500 ease-out"
+                                                        style={{ width: `${getLatestProgress(doc)}%` }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Error */}
+                                        {doc.processing_error && (
+                                            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                                                <span className="font-bold">Error:</span> {doc.processing_error}
+                                            </div>
+                                        )}
+
+                                        {/* AI Result */}
+                                        {doc.processing_status === 'completed' && doc.ai_summary && (
+                                            <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 space-y-2">
+                                                <p className="text-xs font-bold text-emerald-800">✨ AI Summary</p>
+                                                <p className="text-xs text-emerald-700 leading-relaxed">{doc.ai_summary}</p>
+                                                {doc.ai_tags && doc.ai_tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                                        {doc.ai_tags.map((tag, i) => (
+                                                            <span key={i} className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded text-[10px] font-medium">
+                                                                {tag}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Processing Log */}
+                                        {doc.processing_log && doc.processing_log.length > 0 && (
+                                            <div className="border border-surface-200 rounded-lg bg-surface-50 overflow-hidden">
+                                                <div className="p-3 bg-white border-b border-surface-200">
+                                                    <span className="text-xs font-semibold text-navy-900">
+                                                        Detail Aktivitas ({doc.processing_log.length})
+                                                    </span>
+                                                </div>
+                                                <div className="p-3 max-h-48 overflow-y-auto space-y-2 font-mono text-[11px]">
+                                                    {doc.processing_log.map((log, i) => (
+                                                        <div key={i} className="flex gap-2 text-text-600">
+                                                            <span className="text-text-400 shrink-0">
+                                                                [{new Date(log.time).toLocaleTimeString('id-ID')}]
+                                                            </span>
+                                                            <span className={i === doc.processing_log!.length - 1 ? 'text-navy-700 font-semibold' : ''}>
+                                                                {log.message}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                    {doc.processing_status === 'processing' && (
+                                                        <div className="flex gap-2 text-text-400 animate-pulse">
+                                                            <span>[...]</span>
+                                                            <span>Menunggu proses selanjutnya...</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
