@@ -61,10 +61,9 @@ export async function ragQuery(
         const questionEmbedding = await ai.generateEmbedding(question)
         const vectorStr = JSON.stringify(questionEmbedding)
 
-        // ── STEP 3: Cosine similarity search — top 8 chunks ─────────
-        const divisionFilter = scopedToDiv
-            ? `AND d.division_id = '${divisionId}'`
-            : ''
+        // ── STEP 3: Cosine similarity search — top 8 chunks (Documents + Articles) ─────────
+        const docDivFilter = scopedToDiv ? `AND d.division_id = '${divisionId}'` : ''
+        const contentDivFilter = scopedToDiv ? `AND (c.division_id = '${divisionId}' OR c.division_id IS NULL)` : ''
 
         relevantChunks = await prisma.$queryRawUnsafe<
             {
@@ -76,26 +75,56 @@ export async function ragQuery(
                 page_start: number
                 page_end: number
                 division_name: string
+                source_type: 'DOCUMENT' | 'ARTICLE'
             }[]
         >(
-            `SELECT
-          dc.id                                              AS chunk_id,
-          d.id                                               AS document_id,
-          COALESCE(d.ai_title, d.file_name)                  AS doc_title,
-          dc.content,
-          1 - (dc.embedding <=> $1::vector)                  AS similarity,
-          dc.page_number                                     AS page_start,
-          COALESCE(dc.page_end, dc.page_number)              AS page_end,
-          div.name                                           AS division_name
-        FROM document_chunks dc
-        JOIN documents  d   ON dc.document_id = d.id
-        JOIN divisions  div ON d.division_id  = div.id
-        WHERE d.organization_id = $2
-          AND d.is_processed   = true
-          AND dc.embedding IS NOT NULL
-          ${divisionFilter}
-        ORDER BY similarity DESC
-        LIMIT 8`,
+            `
+            WITH combined_chunks AS (
+                -- 1. Get from Document Chunks
+                SELECT
+                    dc.id AS chunk_id,
+                    d.id AS document_id,
+                    COALESCE(d.ai_title, d.file_name) AS doc_title,
+                    dc.content,
+                    1 - (dc.embedding <=> $1::vector) AS similarity,
+                    dc.page_number AS page_start,
+                    COALESCE(dc.page_end, dc.page_number) AS page_end,
+                    div.name AS division_name,
+                    'DOCUMENT' AS source_type
+                FROM document_chunks dc
+                JOIN documents d ON dc.document_id = d.id
+                JOIN divisions div ON d.division_id = div.id
+                WHERE d.organization_id = $2
+                  AND d.is_processed = true
+                  AND dc.embedding IS NOT NULL
+                  ${docDivFilter}
+
+                UNION ALL
+
+                -- 2. Get from Content (Article) Chunks
+                SELECT
+                    cc.id AS chunk_id,
+                    c.id AS document_id,
+                    c.title AS doc_title,
+                    cc.content,
+                    1 - (cc.embedding <=> $1::vector) AS similarity,
+                    cc.chunk_index AS page_start,
+                    cc.chunk_index AS page_end,
+                    COALESCE(div.name, 'Global') AS division_name,
+                    'ARTICLE' AS source_type
+                FROM content_chunks cc
+                JOIN contents c ON cc.content_id = c.id
+                LEFT JOIN divisions div ON c.division_id = div.id
+                WHERE c.organization_id = $2
+                  AND c.status = 'PUBLISHED'
+                  AND c.is_processed = true
+                  AND cc.embedding IS NOT NULL
+                  ${contentDivFilter}
+            )
+            SELECT * FROM combined_chunks
+            ORDER BY similarity DESC
+            LIMIT 8
+            `,
             vectorStr,
             orgId
         )
@@ -110,10 +139,13 @@ export async function ragQuery(
 
     // ── STEP 4: Build context string from chunks ────────────────
     context = relevantChunks
-        .map(
-            (c, i) =>
-                `[Sumber ${i + 1}: ${c.doc_title}, Hal. ${c.page_start}${c.page_end !== c.page_start ? `-${c.page_end}` : ''}]\n${c.content}`
-        )
+        .map((c, i) => {
+            const isDoc = c.source_type === 'DOCUMENT'
+            const location = isDoc
+                ? `Hal. ${c.page_start}${c.page_end !== c.page_start ? `-${c.page_end}` : ''}`
+                : `Bagian ${c.page_start}`
+            return `[Sumber ${i + 1}: ${c.doc_title}, ${location}]\n${c.content}`
+        })
         .join('\n\n---\n\n')
 
     // ── STEP 5: Build system prompt ─────────────────────────────

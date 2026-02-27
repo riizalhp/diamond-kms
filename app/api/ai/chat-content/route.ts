@@ -1,5 +1,5 @@
-// app/api/ai/chat-document/route.ts
-// Single-document RAG chat: embed question → cosine search ONLY this doc's chunks → stream answer
+// app/api/ai/chat-content/route.ts
+// Single-article RAG chat: embed question → cosine search ONLY this article's chunks → stream answer
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/prisma'
 import { getAIServiceForOrg } from '@/lib/ai/get-ai-service'
@@ -9,86 +9,77 @@ export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
     try {
-        const { documentId, question, history = [] } = await req.json()
+        const { contentId, question, history = [] } = await req.json()
 
-        if (!documentId || !question) {
-            return new Response(JSON.stringify({ error: 'Missing documentId or question' }), {
+        if (!contentId || !question) {
+            return new Response(JSON.stringify({ error: 'Missing contentId or question' }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' },
             })
         }
 
-        // Fetch document to get org_id
-        const document = await prisma.document.findUnique({
-            where: { id: documentId },
+        // Fetch content to get org_id
+        const content = await prisma.content.findUnique({
+            where: { id: contentId },
             select: {
                 id: true,
                 organization_id: true,
-                ai_title: true,
-                file_name: true,
-                ai_summary: true,
+                title: true,
                 is_processed: true,
             },
         })
 
-        if (!document) {
-            return new Response(JSON.stringify({ error: 'Document not found' }), {
+        if (!content) {
+            return new Response(JSON.stringify({ error: 'Article not found' }), {
                 status: 404,
                 headers: { 'Content-Type': 'application/json' },
             })
         }
 
         // Get AI service
-        const ai = await getAIServiceForOrg(document.organization_id)
+        const ai = await getAIServiceForOrg(content.organization_id)
 
         // Try to find relevant chunks (may be empty if not processed yet)
-        let context = ''
-        const docTitle = document.ai_title || document.file_name
+        let ragContext = ''
+        const docTitle = content.title
 
-        if (document.is_processed) {
+        if (content.is_processed) {
             // Embed the question
             const questionEmbedding = await ai.generateEmbedding(question)
             const vectorStr = JSON.stringify(questionEmbedding)
 
-            // Cosine similarity search — top 6 chunks from THIS document only
+            // Cosine similarity search — top 4 chunks from THIS article only
             const relevantChunks = await prisma.$queryRawUnsafe<
                 {
                     chunk_id: string
                     content: string
                     similarity: number
-                    page_start: number
-                    page_end: number
                 }[]
             >(
                 `SELECT
-                    dc.id AS chunk_id,
-                    dc.content,
-                    1 - (dc.embedding <=> $1::vector) AS similarity,
-                    dc.page_number AS page_start,
-                    COALESCE(dc.page_end, dc.page_number) AS page_end
-                FROM document_chunks dc
-                WHERE dc.document_id = $2
-                  AND dc.embedding IS NOT NULL
+                    cc.id AS chunk_id,
+                    cc.content,
+                    1 - (cc.embedding <=> $1::vector) AS similarity
+                FROM content_chunks cc
+                WHERE cc.content_id = $2
+                  AND cc.embedding IS NOT NULL
                 ORDER BY similarity DESC
                 LIMIT 4`,
                 vectorStr,
-                documentId
+                contentId
             )
 
-            context = relevantChunks
-                .map(
-                    (c, i) =>
-                        `[Bagian ${i + 1}, Hal. ${c.page_start}${c.page_end !== c.page_start ? `-${c.page_end}` : ''}]\n${c.content}`
-                )
+            ragContext = relevantChunks
+                .map((c, i) => `[Bagian Teks ${i + 1}]\n${c.content}`)
                 .join('\n\n---\n\n')
 
             // Fetch Graph Entities & Relationships
-            const entities = await prisma.documentEntity.findMany({
-                where: { document_id: documentId },
+            const entities = await prisma.contentEntity.findMany({
+                where: { content_id: contentId },
                 take: 15
             })
-            const relationships = await prisma.documentRelationship.findMany({
-                where: { document_id: documentId },
+            const relationships = await prisma.contentRelationship.findMany({
+                where: { content_id: contentId },
                 include: { source_entity: true, target_entity: true },
                 take: 30
             })
@@ -101,23 +92,21 @@ export async function POST(req: NextRequest) {
                 if (relationships.length > 0) {
                     graphContext += `Relasi Hubungan:\n` + relationships.map((r: any) => `- ${r.source_entity.name} [${r.relationship}] ${r.target_entity.name}${r.description ? ` (${r.description})` : ''}`).join('\n') + '\n\n'
                 }
-                context = graphContext + `\n[KUTIPAN TEKS (Vector Search)]\n` + context
+                ragContext = graphContext + `\n[KUTIPAN TEKS (Vector Search)]\n` + ragContext
             }
         }
 
-        // System prompt scoped to this document
-        const systemPrompt = `Anda adalah asisten AI yang membantu user memahami dokumen "${docTitle}".
-${document.ai_summary ? `Ringkasan dokumen: ${document.ai_summary}` : ''}
+        // System prompt scoped to this article
+        const systemPrompt = `Anda adalah asisten AI yang membantu user memahami artikel Knowledge Base berjudul "${docTitle}".
 
 ATURAN PENTING:
-- Jawab pertanyaan HANYA berdasarkan konteks dokumen di bawah, yang mencakup ringkasan teks dan graf pengetahuan entitas + relasinya.
-- Jika informasi tidak ditemukan, katakan "Informasi ini tidak ditemukan dalam dokumen ini."
-- Sebutkan bagian/halaman atau nama entitas relevan saat menjawab.
+- Jawab pertanyaan HANYA berdasarkan konteks artikel di bawah, yang mencakup potongan teks dan graf pengetahuan entitas + relasinya.
+- Jika informasi tidak ditemukan secara eksplisit dari teks, katakan "Informasi ini tidak dibahas dalam artikel ini."
 - Berikan jawaban yang SERTA MERTA, ringkas, dan langsung ke intinya. DILARANG KERAS mengulang-ulang kalimat, poin, atau kesimpulan yang sama.
-- JIKA Anda sudah memberikan kesimpulan atau ringkasan, SELESAIKAN jawaban Anda dan JANGAN menulis ulang kesimpulan/catatan tersebut.
+- JIKA Anda sudah memberikan kesimpulan atau ringkasan, SELESAIKAN jawaban Anda dan JANGAN menulis ulang kesimpulan.
 
-KONTEKS DARI DOKUMEN:
-${context || 'Tidak ada bagian dokumen atau entitas yang relevan ditemukan.'}`
+KONTEKS DARI ARTIKEL:
+${ragContext || 'Tidak ada teks artikel yang diproses AI ditemukan.'}`
 
         // Build chat prompt
         const historyText = (history as { role: string; content: string }[])
@@ -147,11 +136,10 @@ ${context || 'Tidak ada bagian dokumen atau entitas yang relevan ditemukan.'}`
                     )
                     controller.enqueue(encoder.encode(`data: [DONE]\n\n`))
                 } catch (err) {
-                    logger.error('Document chat streaming error:', err)
+                    logger.error('Article chat streaming error:', err)
                     const msg = err instanceof Error ? err.message : 'Unknown error'
-                    // check if msg contains 504
                     const friendlyMsg = msg.includes('504')
-                        ? 'Server AI mengalami Timeout (504). Beban dokumen terlalu panjang atau server sedang sibuk memproses model berat.'
+                        ? 'Server AI mengalami Timeout (504). Beban artikel terlalu panjang atau server sedang sibuk.'
                         : msg
                     controller.enqueue(
                         encoder.encode(`data: ${JSON.stringify({ error: friendlyMsg })}\n\n`)
@@ -170,7 +158,7 @@ ${context || 'Tidak ada bagian dokumen atau entitas yang relevan ditemukan.'}`
             },
         })
     } catch (err) {
-        logger.error('Document chat error:', err)
+        logger.error('Article chat error:', err)
         return new Response(
             JSON.stringify({ error: err instanceof Error ? err.message : 'Internal error' }),
             { status: 500, headers: { 'Content-Type': 'application/json' } }

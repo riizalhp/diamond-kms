@@ -16,8 +16,8 @@ export async function GET(
         env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
         { cookies: { get: (name: string) => cookieStore.get(name)?.value } }
     )
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
 

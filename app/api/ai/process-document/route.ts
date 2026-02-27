@@ -18,20 +18,17 @@ async function updateProcessingLog(
     documentId: string,
     status: string,
     message: string,
-    progress: number,
-    existingLog: any[] = []
+    progress: number
 ) {
     const newEntry = { time: new Date().toISOString(), message, progress }
-    const log = [...existingLog, newEntry]
-    const logJson = JSON.stringify(log)
-    // Use raw SQL to bypass Prisma type validation for newly added columns
+    const entryJson = JSON.stringify([newEntry])
+    // Use jsonb concatenation to prevent race conditions during concurrent updates
     await prisma.$executeRaw`
         UPDATE documents
         SET processing_status = ${status},
-            processing_log = ${logJson}::jsonb
-        WHERE id = ${documentId}::uuid
+            processing_log = COALESCE(processing_log, '[]'::jsonb) || ${entryJson}::jsonb
+        WHERE id = ${documentId}
     `
-    return log
 }
 
 export async function POST(req: NextRequest) {
@@ -71,9 +68,8 @@ export async function POST(req: NextRequest) {
 
 async function processDocumentInBackground(documentId: string, document: any) {
     console.log(`\n🔄 [PROCESS] Starting background processing for ${documentId} (${document.file_name})`)
-    let processingLog: any[] = []
     try {
-        processingLog = await updateProcessingLog(documentId, 'processing', 'Memulai pemrosesan dokumen...', 5, processingLog)
+        await updateProcessingLog(documentId, 'processing', 'Memulai pemrosesan dokumen...', 5)
         console.log(`✅ [PROCESS] DB log updated successfully for ${documentId}`)
     } catch (logErr) {
         console.error(`❌ [PROCESS] updateProcessingLog FAILED for ${documentId}:`, logErr)
@@ -90,7 +86,7 @@ async function processDocumentInBackground(documentId: string, document: any) {
         // STEP 1: Read file content
         const msg1 = 'Membaca dan mengekstrak teks dari file...'
         sendEvent('progress', { step: 'extracting', message: msg1, progress: 10 })
-        processingLog = await updateProcessingLog(documentId, 'processing', msg1, 10, processingLog)
+        await updateProcessingLog(documentId, 'processing', msg1, 10)
 
         let fileBuffer: Buffer | null = null
         let extractedText = ''
@@ -146,7 +142,7 @@ async function processDocumentInBackground(documentId: string, document: any) {
         // STEP 3: Get AI service for this organization
         const msg3 = 'Membuat ringkasan, judul, dan kategori dengan AI...'
         sendEvent('progress', { step: 'metadata', message: msg3, progress: 30 })
-        processingLog = await updateProcessingLog(documentId, 'processing', msg3, 30, processingLog)
+        await updateProcessingLog(documentId, 'processing', msg3, 30)
 
         const ai = await getAIServiceForOrg(document.organization_id)
         console.log(`✅ [PROCESS] Got AI service: ${ai.providerName}, embedding: ${ai.embeddingModel}`)
@@ -178,7 +174,7 @@ async function processDocumentInBackground(documentId: string, document: any) {
         // STEP 6: Chunk document semantically
         const msg6 = 'Memotong dokumen menjadi beberapa bagian indeks...'
         sendEvent('progress', { step: 'chunking', message: msg6, progress: 50 })
-        processingLog = await updateProcessingLog(documentId, 'processing', msg6, 50, processingLog)
+        await updateProcessingLog(documentId, 'processing', msg6, 50)
 
         const chunks = chunkDocument(pages)
         logger.info(`Created ${chunks.length} chunks for ${documentId}`)
@@ -204,7 +200,7 @@ async function processDocumentInBackground(documentId: string, document: any) {
                     // Only send progress updates for every 3rd chunk to avoid overwhelming the client/DB
                     if (processedChunks === 0 || processedChunks === totalChunks - 1 || processedChunks % 3 === 0) {
                         sendEvent('progress', { step: 'embedding', message: embMsg, progress: currentProgress })
-                        processingLog = await updateProcessingLog(documentId, 'processing', embMsg, currentProgress, processingLog)
+                        await updateProcessingLog(documentId, 'processing', embMsg, currentProgress)
                     }
 
                     const embedding = await ai.generateEmbedding(chunk.content)
@@ -213,7 +209,7 @@ async function processDocumentInBackground(documentId: string, document: any) {
                         INSERT INTO document_chunks
                         (id, document_id, chunk_index, content, embedding, token_count, page_number, page_end, created_at)
                         VALUES
-                        (gen_random_uuid(), ${documentId}::uuid, ${chunk.chunkIndex}, ${chunk.content}, ${embeddingString}::vector, ${chunk.tokenCount}, ${chunk.pageStart}, ${chunk.pageEnd}, NOW())
+                        (gen_random_uuid()::text, ${documentId}, ${chunk.chunkIndex}, ${chunk.content}, CAST(${embeddingString} AS vector), ${chunk.tokenCount}, ${chunk.pageStart}, ${chunk.pageEnd}, NOW())
                     `
                     processedChunks++
                 })
@@ -222,22 +218,87 @@ async function processDocumentInBackground(documentId: string, document: any) {
 
         const msgFinal = 'Merapikan dan menyimpan hasil pemrosesan...'
         sendEvent('progress', { step: 'finalizing', message: msgFinal, progress: 95 })
-        processingLog = await updateProcessingLog(documentId, 'processing', msgFinal, 95, processingLog)
+        await updateProcessingLog(documentId, 'processing', msgFinal, 95)
+
+        // STEP 8.5: Extract Graph Entities and Relationships (Graph RAG)
+        const msgGraph = 'Mengekstrak entitas dan hubungan graf pengetahuan...'
+        await updateProcessingLog(documentId, 'processing', msgGraph, 97)
+
+        try {
+            const textToExtract = extractedText.slice(0, 30000)
+            const prompt = `Extract key entities and their relationships from the following text to build a Knowledge Graph.
+Return a valid JSON object with the following structure:
+{
+  "entities": [
+    { "name": "...", "type": "PERSON | ORGANIZATION | LOCATION | CONCEPT | EVENT", "description": "..." }
+  ],
+  "relationships": [
+    { "source_entity": "name of source entity", "target_entity": "name of target entity", "relationship": "WORKS_FOR | IS_LOCATED_IN | RELATED_TO | etc", "description": "..." }
+  ]
+}
+Ensure entity names in relationships perfectly match the names in the entities array. Keep descriptions brief.
+
+Text:
+${textToExtract}`
+
+            const graphJsonStr = await ai.generateCompletion(prompt, { jsonMode: true })
+            const graphData = JSON.parse(graphJsonStr)
+
+            // Save Entities
+            const entityMap = new Map<string, string>() // name -> id
+            if (graphData.entities && Array.isArray(graphData.entities)) {
+                for (const ent of graphData.entities) {
+                    if (!ent.name) continue
+                    const created = await prisma.documentEntity.create({
+                        data: {
+                            document_id: documentId,
+                            name: ent.name,
+                            type: ent.type || 'CONCEPT',
+                            description: ent.description
+                        }
+                    })
+                    entityMap.set(ent.name, created.id)
+                }
+            }
+
+            // Save Relationships
+            if (graphData.relationships && Array.isArray(graphData.relationships)) {
+                for (const rel of graphData.relationships) {
+                    const sourceId = entityMap.get(rel.source_entity)
+                    const targetId = entityMap.get(rel.target_entity)
+                    if (sourceId && targetId) {
+                        await prisma.documentRelationship.create({
+                            data: {
+                                document_id: documentId,
+                                source_entity_id: sourceId,
+                                target_entity_id: targetId,
+                                relationship: rel.relationship || 'RELATED_TO',
+                                description: rel.description
+                            }
+                        })
+                    }
+                }
+            }
+            logger.info(`Graph extraction completed for ${documentId}. Entities: ${entityMap.size}.`)
+        } catch (graphErr) {
+            logger.error(`Graph Extraction failed for ${documentId}:`, graphErr)
+            // Non-fatal, do not break document processing just because graph failed
+        }
 
         // STEP 9: Mark document as processed
         const msgDone = 'Pemrosesan dokumen selesai!'
-        processingLog = [...processingLog, { time: new Date().toISOString(), message: msgDone, progress: 100 }]
-        const finalLogJson = JSON.stringify(processingLog)
+        const finalEntry = { time: new Date().toISOString(), message: msgDone, progress: 100 }
+        const finalEntryJson = JSON.stringify([finalEntry])
 
         // Use raw SQL for new columns + regular update for existing ones
         await prisma.$executeRaw`
             UPDATE documents
             SET is_processed = true,
                 processing_status = 'completed',
-                processing_log = ${finalLogJson}::jsonb,
+                processing_log = COALESCE(processing_log, '[]'::jsonb) || ${finalEntryJson}::jsonb,
                 processing_error = NULL,
                 embedding_version = embedding_version + 1
-            WHERE id = ${documentId}::uuid
+            WHERE id = ${documentId}
         `
 
         // STEP 10: Log AI usage
@@ -264,16 +325,17 @@ async function processDocumentInBackground(documentId: string, document: any) {
         console.error(`\n❌ [PROCESS] AI processing FAILED for ${documentId}:`, err)
         logger.error(`AI processing failed for ${documentId}`, err)
         const errMsg = err instanceof Error ? err.message : 'Unknown processing error'
-        processingLog = [...processingLog, { time: new Date().toISOString(), message: `Error: ${errMsg}`, progress: 0 }]
 
-        const errLogJson = JSON.stringify(processingLog)
+        const errEntry = { time: new Date().toISOString(), message: `Error: ${errMsg}`, progress: 0 }
+        const errEntryJson = JSON.stringify([errEntry])
+
         await prisma.$executeRaw`
             UPDATE documents
             SET is_processed = false,
                 processing_status = 'failed',
-                processing_log = ${errLogJson}::jsonb,
+                processing_log = COALESCE(processing_log, '[]'::jsonb) || ${errEntryJson}::jsonb,
                 processing_error = ${errMsg}
-            WHERE id = ${documentId}::uuid
+            WHERE id = ${documentId}
         `
 
         sendEvent('error', { message: errMsg })

@@ -28,6 +28,7 @@ export const env = {
     ENCRYPTION_KEY: getEnv('ENCRYPTION_KEY'),
 
     // App
+    NEXT_PUBLIC_APP_URL: getEnv('NEXT_PUBLIC_APP_URL'),
     NODE_ENV: process.env.NODE_ENV ?? 'development',
     IS_PRODUCTION: process.env.NODE_ENV === 'production',
 } as const

@@ -93,6 +93,23 @@ export async function publishContentAction(id: string) {
             where: { id },
             data: { status: ContentStatus.PUBLISHED, published_at: new Date() }
         })
+
+        // Trigger background AI processing for GraphRAG
+        const { env } = await import('@/lib/env')
+        const { headers } = await import('next/headers')
+        const headerList = headers()
+        const host = headerList.get('host') || 'localhost:7000'
+        const protocol = host.includes('localhost') ? 'http' : 'https'
+        const baseUrl = env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`
+        fetch(`${baseUrl}/api/ai/process-content`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-internal-secret': env.CRON_SECRET,
+            },
+            body: JSON.stringify({ contentId: id }),
+        }).catch(err => console.error('Failed to trigger AI process-content:', err))
+
         revalidatePath('/dashboard/contents')
         revalidatePath(`/dashboard/contents/${id}`)
         return { success: true }

@@ -163,6 +163,8 @@ model Document {
   organization     Organization    @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   division         Division        @relation(fields: [division_id], references: [id], onDelete: Cascade)
   chunks           DocumentChunk[]
+  entities         DocumentEntity[]
+  relationships    DocumentRelationship[]
 
   @@index([organization_id])
   @@index([division_id])
@@ -174,7 +176,7 @@ model DocumentChunk {
   document_id      String
   chunk_index      Int
   content          String    @db.Text
-  embedding        Unsupported("vector(768)")?
+  embedding        Unsupported("vector(1024)")?
   token_count      Int
   page_number      Int?
   page_end         Int?
@@ -184,6 +186,42 @@ model DocumentChunk {
 
   @@index([document_id])
   @@map("document_chunks")
+}
+
+model DocumentEntity {
+  id               String    @id @default(uuid())
+  document_id      String
+  name             String
+  type             String    // e.g. PERSON, ORGANIZATION, LOCATION, CONCEPT, EVENT
+  description      String?   @db.Text
+  created_at       DateTime  @default(now())
+
+  document         Document  @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  source_relations DocumentRelationship[] @relation("SourceEntity")
+  target_relations DocumentRelationship[] @relation("TargetEntity")
+
+  @@index([document_id])
+  @@index([name])
+  @@map("document_entities")
+}
+
+model DocumentRelationship {
+  id               String         @id @default(uuid())
+  document_id      String
+  source_entity_id String
+  target_entity_id String
+  relationship     String         // e.g. WORKS_FOR, IS_LOCATED_IN, RELATED_TO
+  description      String?        @db.Text
+  created_at       DateTime       @default(now())
+
+  document         Document       @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  source_entity    DocumentEntity @relation("SourceEntity", fields: [source_entity_id], references: [id], onDelete: Cascade)
+  target_entity    DocumentEntity @relation("TargetEntity", fields: [target_entity_id], references: [id], onDelete: Cascade)
+
+  @@index([document_id])
+  @@index([source_entity_id])
+  @@index([target_entity_id])
+  @@map("document_relationships")
 }
 
 model Content {
@@ -197,6 +235,15 @@ model Content {
   status             ContentStatus      @default(DRAFT)
   is_mandatory_read  Boolean            @default(false)
   source_documents   String[]
+  
+  // GraphRAG Processing Metadata
+  is_processed       Boolean            @default(false)
+  processing_status  String             @default("idle") // idle, processing, completed, failed
+  processing_log     Json?              // Array of {time, message, progress}
+  embedding_model    String?            
+  embedding_version  Int                @default(0)
+  processing_error   String?            @db.Text
+
   created_at         DateTime           @default(now())
   published_at       DateTime?
 
@@ -207,6 +254,9 @@ model Content {
   suggestions        RevisionSuggestion[]
   quizzes            Quiz[]
   read_trackers      ReadTracker[]
+  chunks             ContentChunk[]
+  entities           ContentEntity[]
+  relationships      ContentRelationship[]
 
   @@index([organization_id])
   @@index([status])
@@ -452,4 +502,55 @@ model ChatMessage {
 
   @@index([session_id])
   @@map("chat_messages")
+}
+
+model ContentChunk {
+  id               String    @id @default(uuid())
+  content_id       String
+  chunk_index      Int
+  content          String    @db.Text
+  embedding        Unsupported("vector(1024)")?
+  token_count      Int
+  created_at       DateTime  @default(now())
+
+  kb_content       Content   @relation(fields: [content_id], references: [id], onDelete: Cascade)
+
+  @@index([content_id])
+  @@map("content_chunks")
+}
+
+model ContentEntity {
+  id               String    @id @default(uuid())
+  content_id       String
+  name             String
+  type             String    
+  description      String?   @db.Text
+  created_at       DateTime  @default(now())
+
+  kb_content       Content   @relation(fields: [content_id], references: [id], onDelete: Cascade)
+  source_relations ContentRelationship[] @relation("SourceEntity")
+  target_relations ContentRelationship[] @relation("TargetEntity")
+
+  @@index([content_id])
+  @@index([name])
+  @@map("content_entities")
+}
+
+model ContentRelationship {
+  id               String         @id @default(uuid())
+  content_id       String
+  source_entity_id String
+  target_entity_id String
+  relationship     String         
+  description      String?        @db.Text
+  created_at       DateTime       @default(now())
+
+  kb_content       Content        @relation(fields: [content_id], references: [id], onDelete: Cascade)
+  source_entity    ContentEntity  @relation("SourceEntity", fields: [source_entity_id], references: [id], onDelete: Cascade)
+  target_entity    ContentEntity  @relation("TargetEntity", fields: [target_entity_id], references: [id], onDelete: Cascade)
+
+  @@index([content_id])
+  @@index([source_entity_id])
+  @@index([target_entity_id])
+  @@map("content_relationships")
 }

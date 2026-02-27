@@ -37,6 +37,9 @@ export class GeminiService implements AIService {
                 generationConfig: {
                     maxOutputTokens: options?.maxTokens ?? 2048,
                     responseMimeType: options?.jsonMode ? 'application/json' : 'text/plain',
+                    temperature: 0.7,
+                    frequencyPenalty: 0.5,
+                    presencePenalty: 0.1,
                 },
                 ...(options?.systemPrompt && {
                     systemInstruction: options.systemPrompt,
@@ -57,6 +60,11 @@ export class GeminiService implements AIService {
         const model = this.genAI.getGenerativeModel({
             model: this.chatModel,
             systemInstruction: systemPrompt,
+            generationConfig: {
+                temperature: 0.7,
+                frequencyPenalty: 0.5,
+                presencePenalty: 0.1,
+            },
         })
         const result = await model.generateContentStream(prompt)
         for await (const chunk of result.stream) {

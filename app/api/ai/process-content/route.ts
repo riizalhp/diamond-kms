@@ -1,0 +1,262 @@
+// app/api/ai/process-content/route.ts
+// Pipeline: strip HTML → chunk → embed → Graph RAG → save
+import { NextRequest, NextResponse } from 'next/server'
+import prisma from '@/lib/prisma'
+import { ApiResponse } from '@/lib/api/response'
+import { logger } from '@/lib/logging/redact'
+import { getAIServiceForOrg } from '@/lib/ai/get-ai-service'
+import { chunkDocument } from '@/lib/ai/chunker'
+import { env } from '@/lib/env'
+
+export const maxDuration = 120 // Allow up to 2 minutes for large articles
+
+function stripHtml(html: string) {
+    return html.replace(/<[^>]*>?/gm, ' ').replace(/\s\s+/g, ' ').trim()
+}
+
+// Helper to update processing log in DB
+async function updateProcessingLog(
+    contentId: string,
+    status: string,
+    message: string,
+    progress: number
+) {
+    const newEntry = { time: new Date().toISOString(), message, progress }
+    const entryJson = JSON.stringify([newEntry])
+    // Use jsonb concatenation to prevent race conditions during concurrent updates
+    await prisma.$executeRaw`
+        UPDATE contents
+        SET processing_status = ${status},
+            processing_log = COALESCE(processing_log, '[]'::jsonb) || ${entryJson}::jsonb
+        WHERE id = ${contentId}
+    `
+}
+
+export async function POST(req: NextRequest) {
+    // Security: accept calls from internal server actions only
+    const secret = req.headers.get('x-internal-secret')
+    if (secret !== env.CRON_SECRET) {
+        return ApiResponse.forbidden('process-content endpoint')
+    }
+
+    let contentId: string
+    try {
+        const body = await req.json()
+        contentId = body.contentId
+    } catch {
+        return ApiResponse.validationError({ body: 'Invalid JSON' })
+    }
+    if (!contentId) {
+        return ApiResponse.validationError({ contentId: 'required' })
+    }
+
+    // Fetch content from DB
+    const content = await prisma.content.findUnique({
+        where: { id: contentId },
+    })
+
+    if (!content) {
+        return ApiResponse.notFound('Content')
+    }
+
+    // Run background processing without awaiting
+    processContentInBackground(contentId, content).catch(err => {
+        logger.error(`Critical failure in background processing for ${contentId}:`, err)
+    })
+
+    return NextResponse.json({ success: true, message: 'Processing started in background' })
+}
+
+async function processContentInBackground(contentId: string, content: any) {
+    console.log(`\n🔄 [PROCESS] Starting background processing for Article ${contentId} (${content.title})`)
+    try {
+        await updateProcessingLog(contentId, 'processing', 'Memulai pemrosesan artikel...', 5)
+    } catch (logErr) {
+        console.error(`❌ [PROCESS] updateProcessingLog FAILED for ${contentId}:`, logErr)
+    }
+
+    try {
+        // STEP 1: Extract and clean text
+        const msg1 = 'Membersihkan dan mengekstrak teks artikel...'
+        await updateProcessingLog(contentId, 'processing', msg1, 15)
+
+        const rawText = stripHtml(content.body) || 'Artikel kosong.'
+
+        // Treat the whole article as a single "page" for chunker
+        const pages = [{ pageNum: 1, text: `${content.title}\n\n${rawText}` }]
+
+        console.log(`✅ [PROCESS] Extracted article text, ${rawText.length} chars from ${content.title}`)
+
+        // STEP 2: Get AI service for this organization
+        const ai = await getAIServiceForOrg(content.organization_id)
+        console.log(`✅ [PROCESS] Got AI service: ${ai.providerName}, embedding: ${ai.embeddingModel}`)
+
+        // STEP 3: Update Content with AI embedding model
+        await prisma.content.update({
+            where: { id: contentId },
+            data: {
+                embedding_model: ai.embeddingModel,
+            },
+        })
+
+        // STEP 4: Chunk document semantically
+        const msg4 = 'Memotong artikel menjadi beberapa bagian indeks...'
+        await updateProcessingLog(contentId, 'processing', msg4, 40)
+
+        const chunks = chunkDocument(pages)
+        logger.info(`Created ${chunks.length} chunks for ${contentId}`)
+
+        // STEP 5: Remove old chunks if re-processing
+        await prisma.contentChunk.deleteMany({
+            where: { content_id: contentId },
+        })
+
+        // STEP 6: Embed each chunk and save to DB
+        const pLimit = (await import('p-limit')).default
+        const limit = pLimit(4) // Max 4 concurrent concurrent embedding requests
+
+        const totalChunks = chunks.length
+        let processedChunks = 0
+
+        await Promise.all(
+            chunks.map((chunk, i) =>
+                limit(async () => {
+                    const currentProgress = 40 + Math.floor((processedChunks / totalChunks) * 40)
+                    const embMsg = `Membuat vektor embeddings (Bagian ${processedChunks + 1}/${totalChunks})...`
+
+                    // Only send progress updates for every 3rd chunk to avoid overwhelming the client/DB
+                    if (processedChunks === 0 || processedChunks === totalChunks - 1 || processedChunks % 3 === 0) {
+                        await updateProcessingLog(contentId, 'processing', embMsg, currentProgress)
+                    }
+
+                    const embedding = await ai.generateEmbedding(chunk.content)
+                    const embeddingString = `[${embedding.join(',')}]`
+                    await prisma.$executeRaw`
+                        INSERT INTO content_chunks
+                        (id, content_id, chunk_index, content, embedding, token_count, created_at)
+                        VALUES
+                        (gen_random_uuid()::text, ${contentId}, ${chunk.chunkIndex}, ${chunk.content}, CAST(${embeddingString} AS vector), ${chunk.tokenCount}, NOW())
+                    `
+                    processedChunks++
+                })
+            )
+        )
+
+        const msgFinal = 'Merapikan dan menyimpan hasil pemrosesan...'
+        await updateProcessingLog(contentId, 'processing', msgFinal, 90)
+
+        // STEP 7: Extract Graph Entities and Relationships (Graph RAG)
+        const msgGraph = 'Mengekstrak entitas dan hubungan graf pengetahuan...'
+        await updateProcessingLog(contentId, 'processing', msgGraph, 95)
+
+        try {
+            const textToExtract = rawText.slice(0, 30000) // limit input for GraphRAG
+            const prompt = `Extract key entities and their relationships from the following text to build a Knowledge Graph.
+Return a valid JSON object with the following structure:
+{
+  "entities": [
+    { "name": "...", "type": "PERSON | ORGANIZATION | LOCATION | CONCEPT | EVENT", "description": "..." }
+  ],
+  "relationships": [
+    { "source_entity": "name of source entity", "target_entity": "name of target entity", "relationship": "WORKS_FOR | IS_LOCATED_IN | RELATED_TO | etc", "description": "..." }
+  ]
+}
+Ensure entity names in relationships perfectly match the names in the entities array. Keep descriptions brief.
+
+Text:
+${textToExtract}`
+
+            const graphJsonStr = await ai.generateCompletion(prompt, { jsonMode: true })
+            const graphData = JSON.parse(graphJsonStr)
+
+            // Save Entities
+            const entityMap = new Map<string, string>() // name -> id
+            if (graphData.entities && Array.isArray(graphData.entities)) {
+                for (const ent of graphData.entities) {
+                    if (!ent.name) continue
+                    const created = await prisma.contentEntity.create({
+                        data: {
+                            content_id: contentId,
+                            name: ent.name,
+                            type: ent.type || 'CONCEPT',
+                            description: ent.description
+                        }
+                    })
+                    entityMap.set(ent.name, created.id)
+                }
+            }
+
+            // Save Relationships
+            if (graphData.relationships && Array.isArray(graphData.relationships)) {
+                for (const rel of graphData.relationships) {
+                    const sourceId = entityMap.get(rel.source_entity)
+                    const targetId = entityMap.get(rel.target_entity)
+                    if (sourceId && targetId) {
+                        await prisma.contentRelationship.create({
+                            data: {
+                                content_id: contentId,
+                                source_entity_id: sourceId,
+                                target_entity_id: targetId,
+                                relationship: rel.relationship || 'RELATED_TO',
+                                description: rel.description
+                            }
+                        })
+                    }
+                }
+            }
+            logger.info(`Graph extraction completed for article ${contentId}. Entities: ${entityMap.size}.`)
+        } catch (graphErr) {
+            logger.error(`Graph Extraction failed for article ${contentId}:`, graphErr)
+            // Non-fatal, do not break document processing just because graph failed
+        }
+
+        // STEP 8: Mark document as processed
+        const msgDone = 'Pemrosesan artikel selesai!'
+        const finalEntry = { time: new Date().toISOString(), message: msgDone, progress: 100 }
+        const finalEntryJson = JSON.stringify([finalEntry])
+
+        // Use raw SQL for new columns + regular update for existing ones
+        await prisma.$executeRaw`
+            UPDATE contents
+            SET is_processed = true,
+                processing_status = 'completed',
+                processing_log = COALESCE(processing_log, '[]'::jsonb) || ${finalEntryJson}::jsonb,
+                processing_error = NULL,
+                embedding_version = embedding_version + 1
+            WHERE id = ${contentId}
+        `
+
+        // STEP 9: Log AI usage
+        const estimatedTokens = chunks.reduce((sum, c) => sum + c.tokenCount, 0) * 2
+        await prisma.aIUsageLog.create({
+            data: {
+                organization_id: content.organization_id,
+                user_id: content.author_id,
+                action_type: 'AUTO_TAG',
+                tokens_used: estimatedTokens,
+                model_used: ai.embeddingModel,
+            },
+        })
+
+        logger.info(
+            `Article ${contentId} processed successfully (${chunks.length} chunks, model: ${ai.providerName})`
+        )
+
+    } catch (err) {
+        console.error(`\n❌ [PROCESS] AI processing FAILED for Article ${contentId}:`, err)
+        logger.error(`AI processing failed for Article ${contentId}`, err)
+        const errMsg = err instanceof Error ? err.message : 'Unknown processing error'
+
+        const errEntry = { time: new Date().toISOString(), message: `Error: ${errMsg}`, progress: 0 }
+        const errEntryJson = JSON.stringify([errEntry])
+
+        await prisma.$executeRaw`
+            UPDATE contents
+            SET is_processed = false,
+                processing_status = 'failed',
+                processing_log = COALESCE(processing_log, '[]'::jsonb) || ${errEntryJson}::jsonb,
+                processing_error = ${errMsg}
+            WHERE id = ${contentId}
+        `
+    }
+}

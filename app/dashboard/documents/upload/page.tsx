@@ -10,6 +10,7 @@ import {
     Sparkles, ChevronDown, ChevronUp, AlertTriangle, RefreshCcw, Eye
 } from 'lucide-react'
 import Link from 'next/link'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 
 interface ProcessingLogEntry {
     time: string
@@ -79,35 +80,62 @@ export default function UploadDocumentPage() {
 
     // Poll for processing documents
     useEffect(() => {
-        const needsPolling = recentDocs.some(d => !d.is_processed && d.processing_status !== 'failed');
-        if (needsPolling) {
-            pollingRef.current = setInterval(async () => {
-                const pollingDocs = recentDocs.filter(d => !d.is_processed && d.processing_status !== 'failed');
-                const updates = await Promise.all(
-                    pollingDocs.map(async (d) => {
-                        try {
-                            const res = await fetch(`/api/documents/${d.id}/status`)
-                            if (res.ok) {
-                                const data = await res.json()
-                                return data.document as RecentDoc
-                            }
-                        } catch { /* ignore */ }
-                        return null
-                    })
-                )
+        let isMounted = true
+        let timeoutId: NodeJS.Timeout
 
-                setRecentDocs(prev => prev.map(d => {
-                    const updated = updates.find(u => u && u.id === d.id)
-                    return updated || d
-                }))
-            }, 3000)
+        const poll = async () => {
+            const pollingDocs = recentDocs.filter(d => !d.is_processed && d.processing_status !== 'failed')
+            if (pollingDocs.length === 0) return
+
+            const updates = await Promise.all(
+                pollingDocs.map(async (d) => {
+                    try {
+                        const res = await fetch(`/api/documents/${d.id}/status`)
+                        if (res.ok) {
+                            const data = await res.json()
+                            return data.document as RecentDoc
+                        }
+                    } catch { /* ignore */ }
+                    return null
+                })
+            )
+
+            if (!isMounted) return
+
+            let hasChanges = false
+            const newState = recentDocs.map(d => {
+                const updated = updates.find(u => u && u.id === d.id)
+                if (updated) {
+                    const currentProgress = getLatestProgress(d)
+                    const newProgress = getLatestProgress(updated)
+                    if (newProgress < currentProgress && updated.processing_status !== 'failed' && updated.processing_status !== 'completed') {
+                        updated.processing_log = d.processing_log
+                        updated.processing_status = d.processing_status
+                    }
+                    if (JSON.stringify(d) !== JSON.stringify(updated)) {
+                        hasChanges = true
+                    }
+                    return updated
+                }
+                return d
+            })
+
+            if (hasChanges && isMounted) {
+                setRecentDocs(newState)
+            } else if (isMounted) {
+                // If no changes, still poll again
+                timeoutId = setTimeout(poll, 3000)
+            }
+        }
+
+        const needsPolling = recentDocs.some(d => !d.is_processed && d.processing_status !== 'failed')
+        if (needsPolling) {
+            timeoutId = setTimeout(poll, 3000)
         }
 
         return () => {
-            if (pollingRef.current) {
-                clearInterval(pollingRef.current)
-                pollingRef.current = null
-            }
+            isMounted = false
+            clearTimeout(timeoutId)
         }
     }, [recentDocs])
 
@@ -410,6 +438,62 @@ export default function UploadDocumentPage() {
                                                 <Eye size={16} />
                                             </Link>
                                         )}
+                                        <Dialog>
+                                            <DialogTrigger asChild>
+                                                <button
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    className="text-amber-600 hover:text-amber-700 p-1.5 rounded hover:bg-amber-100 transition text-xs font-semibold"
+                                                    title="Debug Proses AI"
+                                                >
+                                                    DEBUG
+                                                </button>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-xl max-h-[80vh] overflow-y-auto">
+                                                <DialogHeader>
+                                                    <DialogTitle className="flex flex-col gap-1 text-left">
+                                                        <span>Debug Proses: {doc.ai_title || doc.file_name}</span>
+                                                        <span className="text-xs text-text-400 font-normal">ID: {doc.id}</span>
+                                                    </DialogTitle>
+                                                </DialogHeader>
+                                                <div className="space-y-4 pt-4">
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold text-navy-900 mb-2">Status Umum</h4>
+                                                        <div className="bg-surface-50 p-3 rounded-md border border-surface-200 text-xs font-mono space-y-1">
+                                                            <p>Status: <span className="font-bold text-navy-600">{doc.processing_status}</span></p>
+                                                            <p>Progress: <span className="font-bold text-navy-600">{getLatestProgress(doc)}%</span></p>
+                                                            <p>Selesai: {doc.is_processed ? 'Yes' : 'No'}</p>
+                                                            {doc.processing_error && <p className="text-red-600 mt-2 font-bold whitespace-pre-wrap">Error: {doc.processing_error}</p>}
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold text-navy-900 mb-2">Log Backend</h4>
+                                                        <div className="bg-slate-900 text-slate-300 p-3 rounded-md text-xs font-mono max-h-64 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-700">
+                                                            {doc.processing_log && doc.processing_log.length > 0 ? (
+                                                                doc.processing_log.map((log, i) => (
+                                                                    <div key={i} className="flex gap-3">
+                                                                        <span className="text-slate-500 shrink-0 select-none">[{new Date(log.time).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
+                                                                        <span className={`${i === doc.processing_log!.length - 1 ? 'text-emerald-400 font-semibold' : ''} whitespace-pre-wrap`}>
+                                                                            {log.message}
+                                                                            <span className="ml-2 text-slate-600">({log.progress}%)</span>
+                                                                        </span>
+                                                                    </div>
+                                                                ))
+                                                            ) : (
+                                                                <span className="text-slate-500 italic">Belum ada log terekam</span>
+                                                            )}
+                                                            {doc.processing_status === 'processing' && (
+                                                                <div className="flex gap-3 text-slate-500 animate-pulse mt-2 pt-2 border-t border-slate-800">
+                                                                    <span>[   ...  ]</span>
+                                                                    <span>Menunggu update dari server...</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+
                                         {expandedDocId === doc.id ? (
                                             <ChevronUp size={16} className="text-text-400" />
                                         ) : (

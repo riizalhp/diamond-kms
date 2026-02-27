@@ -301,26 +301,10 @@ export default function DocumentDetailPage() {
                             {/* Processing banner */}
                             {!doc.is_processed && (
                                 <div className="bg-amber-50 border border-amber-300 rounded-lg p-4 text-center space-y-2">
-                                    <p className="text-sm text-amber-800 font-medium">
-                                        ⚠️ Dokumen ini belum diproses AI. Chat mungkin tidak bisa menjawab pertanyaan detail.
-                                    </p>
-
-                                    {doc.processing_status === 'processing' ? (
+                                    {doc.processing_status === 'processing' && (
                                         <div className="flex items-center justify-center gap-2 text-xs font-semibold text-amber-900 bg-amber-200/50 py-1.5 rounded-md px-4 w-fit mx-auto">
-                                            <Loader2 size={12} className="animate-spin text-amber-700" /> Sedang Memproses...
+                                            <Loader2 size={12} className="animate-spin text-amber-700" /> AI Membaca Dokumen...
                                         </div>
-                                    ) : (
-                                        <button
-                                            onClick={handleReprocess}
-                                            disabled={reprocessing}
-                                            className="btn btn-primary text-xs px-4 py-1.5"
-                                        >
-                                            {reprocessing ? (
-                                                <span className="flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Memproses...</span>
-                                            ) : (
-                                                '🔄 Proses Dokumen Sekarang'
-                                            )}
-                                        </button>
                                     )}
 
                                     {/* Live Processing Log */}

@@ -101,6 +101,24 @@ export async function reviewApprovalAction(queueId: string, reviewerId: string, 
             })
         ])
 
+        // If approved (published), trigger AI processing
+        if (nextContentStatus === ContentStatus.PUBLISHED) {
+            const { env } = await import('@/lib/env')
+            const { headers } = await import('next/headers')
+            const headerList = headers()
+            const host = headerList.get('host') || 'localhost:7000'
+            const protocol = host.includes('localhost') ? 'http' : 'https'
+            const baseUrl = env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`
+            fetch(`${baseUrl}/api/ai/process-content`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-internal-secret': env.CRON_SECRET,
+                },
+                body: JSON.stringify({ contentId: queue.content_id }),
+            }).catch(err => console.error('Failed to trigger AI process-content:', err))
+        }
+
         revalidatePath('/dashboard/approvals')
         revalidatePath('/dashboard/contents')
         revalidatePath(`/dashboard/contents/${queue.content_id}`)

@@ -77,13 +77,19 @@ export class OpenAICompatService implements AIService {
             }
             messages.push({ role: 'user', content: prompt })
 
+            const requestBody: any = {
+                model: this.chatModel,
+                max_tokens: options?.maxTokens ?? 2048,
+                response_format: options?.jsonMode ? { type: 'json_object' } : undefined,
+                messages,
+                temperature: 0.7,
+                frequency_penalty: 0.5,
+                presence_penalty: 0.1,
+                repetition_penalty: 1.15,
+            }
+
             try {
-                const response = await this.client.chat.completions.create({
-                    model: this.chatModel,
-                    max_tokens: options?.maxTokens ?? 2048,
-                    response_format: options?.jsonMode ? { type: 'json_object' } : undefined,
-                    messages,
-                })
+                const response = await this.client.chat.completions.create(requestBody)
                 console.log(`[AI-SELFHOSTED] Completion finished in ${Date.now() - startTime}ms`)
                 return response.choices[0]?.message.content ?? ''
             } catch (err: any) {
@@ -99,17 +105,23 @@ export class OpenAICompatService implements AIService {
         onChunk: (chunk: string) => void,
         signal?: AbortSignal
     ): Promise<void> {
+        const requestBody: any = {
+            model: this.chatModel,
+            stream: true,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: prompt },
+            ],
+            temperature: 0.7,
+            frequency_penalty: 0.5,
+            presence_penalty: 0.1,
+            repetition_penalty: 1.15,
+        }
+
         const stream = await this.client.chat.completions.create(
-            {
-                model: this.chatModel,
-                stream: true,
-                messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: prompt },
-                ],
-            },
+            requestBody,
             { signal }
-        )
+        ) as unknown as AsyncIterable<any>
         for await (const chunk of stream) {
             const text = chunk.choices[0]?.delta.content ?? ''
             if (text) onChunk(text)
