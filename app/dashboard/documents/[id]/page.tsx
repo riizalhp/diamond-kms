@@ -6,7 +6,8 @@ import { getDocumentByIdAction } from '@/lib/actions/document.actions'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import {
     ArrowLeft, FileText, Bot, Tag, FolderOpen, User,
-    Maximize2, Minimize2, Loader2, Send, MessageSquare, Sparkles
+    Maximize2, Minimize2, Loader2, Send, MessageSquare, Sparkles,
+    Trash2, ClipboardList
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -23,14 +24,31 @@ export default function DocumentDetailPage() {
     const [pdfFullscreen, setPdfFullscreen] = useState(false)
     const [pdfUrl, setPdfUrl] = useState<string | null>(null)
     const [pdfLoading, setPdfLoading] = useState(false)
+    const [pdfError, setPdfError] = useState<string | null>(null)
 
     // Chat state
     const [messages, setMessages] = useState<ChatMessage[]>([])
+    const [chatSessionId, setChatSessionId] = useState<string | null>(null)
     const [input, setInput] = useState('')
     const [isStreaming, setIsStreaming] = useState(false)
+    const [isSummarizing, setIsSummarizing] = useState(false)
     const [reprocessing, setReprocessing] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
+
+    // Fetch chart history on mount
+    useEffect(() => {
+        if (params.id) {
+            fetch(`/api/chat/entity?documentId=${params.id}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.messages && data.messages.length > 0) {
+                        setMessages(data.messages)
+                    }
+                    if (data.sessionId) setChatSessionId(data.sessionId)
+                }).catch(() => { })
+        }
+    }, [params.id])
 
     useEffect(() => {
         if (params.id) {
@@ -43,18 +61,21 @@ export default function DocumentDetailPage() {
 
     const isPDF = doc?.mime_type === 'application/pdf'
 
+    // Use proxy endpoint to bypass signed URL JWT issues
+    const loadPdfUrl = () => {
+        if (!doc?.file_path) return
+        setPdfLoading(false)
+        setPdfError(null)
+        // Use our proxy endpoint that downloads from Supabase server-side
+        // This bypasses any signed URL / JWT expiration issues
+        setPdfUrl(`/api/documents/pdf/${doc.file_path}`)
+    }
+
     useEffect(() => {
         if (doc && isPDF && doc.file_path && !pdfUrl) {
-            setPdfLoading(true)
-            fetch(`/api/documents/signed-url/${doc.file_path}`)
-                .then(r => r.json())
-                .then(data => {
-                    if (data.url) setPdfUrl(data.url)
-                })
-                .catch(() => { /* ignore */ })
-                .finally(() => setPdfLoading(false))
+            loadPdfUrl()
         }
-    }, [doc, isPDF, pdfUrl])
+    }, [doc, isPDF])
 
     // Auto-scroll to bottom when messages change
     useEffect(() => {
@@ -201,6 +222,16 @@ export default function DocumentDetailPage() {
                     }
                 }
             }
+            // Save chat history to DB
+            await fetch('/api/chat/entity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    documentId: params.id,
+                    title: doc?.title || 'Document Q&A',
+                    messages: [...newMessages, { role: 'assistant', content: fullText }]
+                })
+            })
         } catch (err) {
             setMessages(prev => {
                 const updated = [...prev]
@@ -219,6 +250,84 @@ export default function DocumentDetailPage() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             sendMessage()
+        }
+    }
+
+    const clearChat = async () => {
+        setMessages([])
+        setChatSessionId(null)
+        if (params.id) {
+            try {
+                await fetch(`/api/chat/entity?documentId=${params.id}`, { method: 'DELETE' })
+            } catch { }
+        }
+    }
+
+    const handleSummary = async () => {
+        if (messages.length === 0 || isStreaming || isSummarizing) return
+        setIsSummarizing(true)
+
+        const summaryPrompt = 'Buatkan ringkasan dari seluruh percakapan kita di atas dalam bentuk poin-poin utama.'
+        const userMsg: ChatMessage = { role: 'user', content: summaryPrompt }
+        const newMessages = [...messages, userMsg]
+        setMessages(newMessages)
+        setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+
+        try {
+            const res = await fetch('/api/ai/chat-document', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    documentId: doc.id,
+                    question: summaryPrompt,
+                    history: newMessages.slice(-20),
+                }),
+            })
+
+            if (!res.ok) {
+                setMessages(prev => {
+                    const updated = [...prev]
+                    updated[updated.length - 1] = { role: 'assistant', content: '⚠️ Gagal membuat ringkasan' }
+                    return updated
+                })
+                return
+            }
+
+            const reader = res.body?.getReader()
+            const decoder = new TextDecoder()
+            if (!reader) return
+
+            let fullText = ''
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                const chunk = decoder.decode(value, { stream: true })
+                for (const line of chunk.split('\n')) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6)
+                        if (data === '[DONE]') continue
+                        try {
+                            const parsed = JSON.parse(data)
+                            if (parsed.text) {
+                                fullText += parsed.text
+                                setMessages(prev => {
+                                    const updated = [...prev]
+                                    updated[updated.length - 1] = { role: 'assistant', content: fullText }
+                                    return updated
+                                })
+                            }
+                        } catch { }
+                    }
+                }
+            }
+        } catch {
+            setMessages(prev => {
+                const updated = [...prev]
+                updated[updated.length - 1] = { role: 'assistant', content: '⚠️ Koneksi terputus.' }
+                return updated
+            })
+        } finally {
+            setIsSummarizing(false)
         }
     }
 
@@ -286,14 +395,36 @@ export default function DocumentDetailPage() {
                 {!pdfFullscreen && (
                     <div className="card overflow-hidden flex flex-col" style={{ width: isPDF ? '45%' : '100%', minWidth: 0 }}>
                         {/* Chat Header */}
-                        <div className="px-4 py-3 border-b border-surface-200 bg-gradient-to-r from-navy-50 to-surface-50 flex items-center gap-2 shrink-0">
-                            <div className="w-7 h-7 rounded-full bg-navy-600 flex items-center justify-center">
-                                <Sparkles size={14} className="text-white" />
+                        <div className="px-4 py-3 border-b border-surface-200 bg-gradient-to-r from-navy-50 to-surface-50 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-navy-600 flex items-center justify-center">
+                                    <Sparkles size={14} className="text-white" />
+                                </div>
+                                <div>
+                                    <h2 className="font-bold font-display text-navy-900 text-sm">Tanya Dokumen</h2>
+                                    <p className="text-[10px] text-text-400">AI akan menjawab berdasarkan isi dokumen ini</p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="font-bold font-display text-navy-900 text-sm">Tanya Dokumen</h2>
-                                <p className="text-[10px] text-text-400">AI akan menjawab berdasarkan isi dokumen ini</p>
-                            </div>
+                            {messages.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={handleSummary}
+                                        disabled={isStreaming || isSummarizing}
+                                        className="p-1.5 text-text-400 hover:text-navy-700 hover:bg-navy-50 rounded-md transition disabled:opacity-40"
+                                        title="Ringkas Percakapan"
+                                    >
+                                        <ClipboardList size={15} />
+                                    </button>
+                                    <button
+                                        onClick={clearChat}
+                                        disabled={isStreaming}
+                                        className="p-1.5 text-text-400 hover:text-red-600 hover:bg-red-50 rounded-md transition disabled:opacity-40"
+                                        title="Hapus Chat"
+                                    >
+                                        <Trash2 size={15} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Messages Area */}
@@ -417,19 +548,40 @@ export default function DocumentDetailPage() {
                             </button>
                         </div>
                         <div className="flex-1 bg-surface-100">
-                            {pdfLoading || !pdfUrl ? (
+                            {pdfLoading ? (
                                 <div className="flex items-center justify-center h-full">
                                     <div className="text-center space-y-2">
                                         <Loader2 size={28} className="text-navy-600 animate-spin mx-auto" />
                                         <p className="text-xs text-text-500">Memuat PDF...</p>
                                     </div>
                                 </div>
-                            ) : (
+                            ) : pdfError ? (
+                                <div className="flex items-center justify-center h-full">
+                                    <div className="text-center space-y-3 p-6">
+                                        <FileText size={36} className="text-text-300 mx-auto" />
+                                        <p className="text-sm text-danger font-medium">Gagal memuat PDF</p>
+                                        <p className="text-xs text-text-400 max-w-xs">{pdfError}</p>
+                                        <button
+                                            onClick={loadPdfUrl}
+                                            className="btn btn-primary btn-sm mt-2"
+                                        >
+                                            Coba Lagi
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : pdfUrl ? (
                                 <iframe
                                     src={`${pdfUrl}#toolbar=1&navpanes=0`}
                                     className="w-full h-full border-0"
                                     title="PDF Viewer"
                                 />
+                            ) : (
+                                <div className="flex items-center justify-center h-full">
+                                    <div className="text-center space-y-2">
+                                        <FileText size={28} className="text-text-300 mx-auto" />
+                                        <p className="text-xs text-text-500">PDF tidak tersedia</p>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     </div>

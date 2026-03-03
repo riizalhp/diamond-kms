@@ -139,9 +139,14 @@ export default function BillingPage() {
                                         </td>
                                         <td className="p-4 text-right">
                                             {inv.invoice_pdf_path && (
-                                                <button className="text-navy-600 hover:text-navy-900 text-sm font-medium flex items-center gap-1 ml-auto">
+                                                <a
+                                                    href={inv.invoice_pdf_path}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-navy-600 hover:text-navy-900 text-sm font-medium flex items-center gap-1 ml-auto"
+                                                >
                                                     <Download size={14} /> PDF
-                                                </button>
+                                                </a>
                                             )}
                                         </td>
                                     </tr>

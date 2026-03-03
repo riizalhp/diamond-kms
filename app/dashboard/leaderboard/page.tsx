@@ -6,20 +6,23 @@ import { getLeaderboardAction } from '@/lib/actions/leaderboard.actions'
 import { Trophy, Medal, Award, TrendingUp, Sparkles } from 'lucide-react'
 
 export default function LeaderboardPage() {
-    const { organization, user } = useCurrentUser()
+    const { organization, user, role, division } = useCurrentUser()
     const [leaders, setLeaders] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
+    const isStaff = role === 'STAFF'
 
     useEffect(() => {
         if (organization?.id) {
-            getLeaderboardAction(organization.id).then(res => {
+            // Staff sees division leaderboard, others see org-wide
+            const divFilter = isStaff ? division?.id : undefined
+            getLeaderboardAction(organization.id, 20, divFilter).then(res => {
                 if (res.success) {
                     setLeaders(res.data || [])
                 }
                 setLoading(false)
             })
         }
-    }, [organization?.id])
+    }, [organization?.id, division?.id])
 
     // Render podium icons for top 3
     const renderRankIcon = (index: number) => {
@@ -43,7 +46,9 @@ export default function LeaderboardPage() {
                         <Sparkles size={16} />
                         Gamification & Rewards
                     </div>
-                    <h1 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">Organization Leaderboard</h1>
+                    <h1 className="text-4xl md:text-5xl font-extrabold mb-4 tracking-tight">
+                        {isStaff ? 'Division Leaderboard' : 'Organization Leaderboard'}
+                    </h1>
                     <p className="text-blue-100 text-lg leading-relaxed opacity-90">
                         Compete with your peers by completing mandatory readings and scoring high on quizzes to showcase your expertise. Top learners shape the future of our knowledge base!
                     </p>

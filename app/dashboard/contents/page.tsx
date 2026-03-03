@@ -7,14 +7,17 @@ import { Plus, Search, Eye, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 export default function ContentsPage() {
-    const { organization, role } = useCurrentUser()
+    const { organization, role, division } = useCurrentUser()
     const [contents, setContents] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
+    const isStaff = role === 'STAFF'
 
     const loadData = async () => {
         if (!organization?.id) return
-        const res = await getContentsAction(organization.id)
+        // Staff only sees their own division's content
+        const divFilter = isStaff ? division?.id : undefined
+        const res = await getContentsAction(organization.id, divFilter)
         if (res.success) {
             setContents(res.data || [])
         }
@@ -23,7 +26,7 @@ export default function ContentsPage() {
 
     useEffect(() => {
         loadData()
-    }, [organization?.id])
+    }, [organization?.id, division?.id])
 
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this article?')) return

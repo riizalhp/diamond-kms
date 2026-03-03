@@ -7,14 +7,17 @@ import { Plus, Search, HelpCircle, Trash2, Clock, CheckCircle, FileQuestion } fr
 import Link from 'next/link'
 
 export default function QuizzesPage() {
-    const { organization, role } = useCurrentUser()
+    const { organization, role, division } = useCurrentUser()
     const [quizzes, setQuizzes] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
+    const isStaff = role === 'STAFF'
 
     const loadData = async () => {
         if (!organization?.id) return
-        const res = await getQuizzesAction(organization.id)
+        // Staff only sees their own division's quizzes
+        const divFilter = isStaff ? division?.id : undefined
+        const res = await getQuizzesAction(organization.id, divFilter)
         if (res.success) {
             setQuizzes(res.data || [])
         }
@@ -23,7 +26,7 @@ export default function QuizzesPage() {
 
     useEffect(() => {
         loadData()
-    }, [organization?.id])
+    }, [organization?.id, division?.id])
 
     const handleDelete = async (id: string) => {
         if (!confirm('Are you sure you want to delete this quiz?')) return

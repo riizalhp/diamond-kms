@@ -479,6 +479,8 @@ model ChatSession {
   organization_id String
   title           String        @default("New Chat")
   summary         String?       @db.Text
+  document_id     String?
+  content_id      String?
   created_at      DateTime      @default(now())
   updated_at      DateTime      @default(now()) @updatedAt
 

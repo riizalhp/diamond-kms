@@ -7,7 +7,7 @@ import { submitForApprovalAction } from '@/lib/actions/approval.actions'
 import { checkAcknowledgeStatusAction, acknowledgeReadAction } from '@/lib/actions/read-tracker.actions'
 import { createSuggestionAction } from '@/lib/actions/suggestion.actions'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
-import { ArrowLeft, Edit, FileText, CheckCircle, ExternalLink, Send, MessageSquarePlus, Maximize2, Minimize2, Loader2, Bot, MessageSquare, Sparkles } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, CheckCircle, ExternalLink, Send, MessageSquarePlus, Maximize2, Minimize2, Loader2, Bot, MessageSquare, Sparkles, Trash2, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 
 interface ChatMessage {
@@ -33,12 +33,28 @@ export default function ContentDetailPage() {
 
     // Chat state
     const [messages, setMessages] = useState<ChatMessage[]>([])
+    const [chatSessionId, setChatSessionId] = useState<string | null>(null)
     const [input, setInput] = useState('')
     const [isStreaming, setIsStreaming] = useState(false)
+    const [isSummarizing, setIsSummarizing] = useState(false)
     const messagesEndRef = useRef<HTMLDivElement>(null)
     const inputRef = useRef<HTMLTextAreaElement>(null)
     const [articleFullscreen, setArticleFullscreen] = useState(false)
     const [reprocessing, setReprocessing] = useState(false)
+
+    // Fetch chat history on mount
+    useEffect(() => {
+        if (params.id) {
+            fetch(`/api/chat/entity?contentId=${params.id}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.messages && data.messages.length > 0) {
+                        setMessages(data.messages)
+                    }
+                    if (data.sessionId) setChatSessionId(data.sessionId)
+                }).catch(() => { })
+        }
+    }, [params.id])
 
     useEffect(() => {
         if (params.id) {
@@ -247,6 +263,16 @@ export default function ContentDetailPage() {
                     }
                 }
             }
+            // Save chat history to DB
+            await fetch('/api/chat/entity', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contentId: params.id,
+                    title: content?.title || 'Knowledge Base Q&A',
+                    messages: [...newMessages, { role: 'assistant', content: fullText }]
+                })
+            })
         } catch (err) {
             setMessages(prev => {
                 const updated = [...prev]
@@ -295,6 +321,84 @@ export default function ContentDetailPage() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             sendMessage()
+        }
+    }
+
+    const clearChat = async () => {
+        setMessages([])
+        setChatSessionId(null)
+        if (params.id) {
+            try {
+                await fetch(`/api/chat/entity?contentId=${params.id}`, { method: 'DELETE' })
+            } catch { }
+        }
+    }
+
+    const handleSummary = async () => {
+        if (messages.length === 0 || isStreaming || isSummarizing) return
+        setIsSummarizing(true)
+
+        const summaryPrompt = 'Buatkan ringkasan dari seluruh percakapan kita di atas dalam bentuk poin-poin utama.'
+        const userMsg: ChatMessage = { role: 'user', content: summaryPrompt }
+        const newMessages = [...messages, userMsg]
+        setMessages(newMessages)
+        setMessages(prev => [...prev, { role: 'assistant', content: '' }])
+
+        try {
+            const res = await fetch('/api/ai/chat-content', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contentId: content.id,
+                    question: summaryPrompt,
+                    history: newMessages.slice(-20),
+                }),
+            })
+
+            if (!res.ok) {
+                setMessages(prev => {
+                    const updated = [...prev]
+                    updated[updated.length - 1] = { role: 'assistant', content: '⚠️ Gagal membuat ringkasan' }
+                    return updated
+                })
+                return
+            }
+
+            const reader = res.body?.getReader()
+            const decoder = new TextDecoder()
+            if (!reader) return
+
+            let fullText = ''
+            while (true) {
+                const { done, value } = await reader.read()
+                if (done) break
+                const chunk = decoder.decode(value, { stream: true })
+                for (const line of chunk.split('\n')) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.slice(6)
+                        if (data === '[DONE]') continue
+                        try {
+                            const parsed = JSON.parse(data)
+                            if (parsed.text) {
+                                fullText += parsed.text
+                                setMessages(prev => {
+                                    const updated = [...prev]
+                                    updated[updated.length - 1] = { role: 'assistant', content: fullText }
+                                    return updated
+                                })
+                            }
+                        } catch { }
+                    }
+                }
+            }
+        } catch {
+            setMessages(prev => {
+                const updated = [...prev]
+                updated[updated.length - 1] = { role: 'assistant', content: '⚠️ Koneksi terputus.' }
+                return updated
+            })
+        } finally {
+            setIsSummarizing(false)
         }
     }
 
@@ -391,14 +495,36 @@ export default function ContentDetailPage() {
                 {isPublished && !articleFullscreen && (
                     <div className="card overflow-hidden flex flex-col w-[35%] min-w-[320px] max-w-[400px]">
                         {/* Chat Header */}
-                        <div className="px-4 py-3 border-b border-surface-200 bg-gradient-to-r from-navy-50 to-surface-50 flex items-center gap-2 shrink-0">
-                            <div className="w-7 h-7 rounded-full bg-navy-600 flex items-center justify-center">
-                                <Sparkles size={14} className="text-white" />
+                        <div className="px-4 py-3 border-b border-surface-200 bg-gradient-to-r from-navy-50 to-surface-50 flex items-center justify-between shrink-0">
+                            <div className="flex items-center gap-2">
+                                <div className="w-7 h-7 rounded-full bg-navy-600 flex items-center justify-center">
+                                    <Sparkles size={14} className="text-white" />
+                                </div>
+                                <div>
+                                    <h2 className="font-bold font-display text-navy-900 text-sm">AI Article Assistant</h2>
+                                    <p className="text-[10px] text-text-400">Tanya seputar isi artikel ini</p>
+                                </div>
                             </div>
-                            <div>
-                                <h2 className="font-bold font-display text-navy-900 text-sm">AI Article Assistant</h2>
-                                <p className="text-[10px] text-text-400">Tanya seputar isi artikel ini</p>
-                            </div>
+                            {messages.length > 0 && (
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={handleSummary}
+                                        disabled={isStreaming || isSummarizing}
+                                        className="p-1.5 text-text-400 hover:text-navy-700 hover:bg-navy-50 rounded-md transition disabled:opacity-40"
+                                        title="Ringkas Percakapan"
+                                    >
+                                        <ClipboardList size={15} />
+                                    </button>
+                                    <button
+                                        onClick={clearChat}
+                                        disabled={isStreaming}
+                                        className="p-1.5 text-text-400 hover:text-red-600 hover:bg-red-50 rounded-md transition disabled:opacity-40"
+                                        title="Hapus Chat"
+                                    >
+                                        <Trash2 size={15} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
 
                         {/* Messages Area */}

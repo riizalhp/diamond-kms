@@ -87,6 +87,11 @@ export async function POST(req: NextRequest) {
             return Response.json({ error: 'Question is required' }, { status: 400 })
         }
 
+        // ── Greeting Detection ───────────────────────────────────────
+        // If user input is just a greeting, respond directly without RAG
+        const GREETING_PATTERN = /^(h[ae]llo|hai|hi|hey|yo|hola|selamat\s+(pagi|siang|sore|malam)|apa\s*kabar|assalamualaikum|salam)[\s!?.,]*$/i
+        const isGreeting = GREETING_PATTERN.test(question.trim())
+
         const abortController = new AbortController()
         const signal = abortController.signal
 
@@ -101,82 +106,104 @@ export async function POST(req: NextRequest) {
                 }
 
                 try {
-                    // Call RAG pipeline, stream chunk by chunk
-                    const citations = await ragQuery({
-                        question,
-                        history,
-                        userId: user.id,
-                        orgId,
-                        userRole: userDiv.role,
-                        divisionId: userDiv.division_id,
-                        crossDivisionEnabled:
-                            orgConfig?.cross_division_query_enabled ?? false,
-                        onChunk: (text) => send('chunk', { text }),
-                        signal,
-                    })
+                    if (isGreeting) {
+                        // ── Greeting response without RAG/references ──────
+                        const greetingResponses = [
+                            'Halo! 👋 Ada yang bisa saya bantu mengenai dokumen perusahaan?',
+                            'Hai! 😊 Silakan tanyakan apapun tentang knowledge base Anda.',
+                            'Halo! Saya siap membantu Anda mencari informasi dari dokumen. Silakan bertanya!',
+                            'Hai! 👋 Saya AI Knowledge Assistant. Apa yang ingin Anda ketahui?',
+                        ]
+                        const greetReply = greetingResponses[Math.floor(Math.random() * greetingResponses.length)]
 
-                    // Send citations as final event
-                    send('citations', { citations })
-                    send('done', { done: true })
-
-                    // ── Persist messages to DB ───────────────────────────
-                    if (sessionId) {
-                        try {
-                            // Collect full response text for persistence
-                            // We need a separate mechanism since streaming already happened
-                            // The full text is reconstructed client-side and sent back,
-                            // but we can also reconstruct from the RAG pipeline
-                            // For now, save via a follow-up from the client
-
-                            // Auto-generate title if this is the first exchange
-                            const msgCount = await prisma.chatMessage.count({
-                                where: { session_id: sessionId },
-                            })
-
-                            if (msgCount === 0) {
-                                // Generate title from the first question
-                                try {
-                                    const { getAIServiceForOrg } = await import('@/lib/ai/get-ai-service')
-                                    const ai = await getAIServiceForOrg(orgId)
-                                    const title = await ai.generateCompletion(
-                                        `Buatkan judul singkat (maksimal 6 kata, tanpa tanda kutip) untuk percakapan yang dimulai dengan pertanyaan: "${question.slice(0, 200)}"`,
-                                        { maxTokens: 30 }
-                                    )
-                                    const cleanTitle = title.trim().replace(/^["']|["']$/g, '').slice(0, 80)
-                                    await prisma.chatSession.update({
-                                        where: { id: sessionId },
-                                        data: { title: cleanTitle || question.slice(0, 50) },
-                                    })
-                                    send('title_updated', { title: cleanTitle || question.slice(0, 50) })
-                                } catch (titleErr) {
-                                    logger.warn('Failed to generate chat title', titleErr)
-                                    // Fallback: use question as title
-                                    await prisma.chatSession.update({
-                                        where: { id: sessionId },
-                                        data: { title: question.slice(0, 50) },
-                                    })
-                                    send('title_updated', { title: question.slice(0, 50) })
-                                }
-                            }
-                        } catch (persistErr) {
-                            logger.warn('Failed to persist chat session metadata', persistErr)
+                        // Send as streaming chunks (natural feel)
+                        const words = greetReply.split(' ')
+                        for (const word of words) {
+                            send('chunk', { text: word + ' ' })
+                            await new Promise(r => setTimeout(r, 30))
                         }
-                    }
 
-                    // Log AI usage
-                    try {
-                        await prisma.aIUsageLog.create({
-                            data: {
-                                organization_id: orgId,
-                                user_id: user.id,
-                                action_type: 'CHAT_QUERY',
-                                tokens_used: Math.ceil(question.length / 3.5) * 3,
-                                model_used: 'gemini-2.5-flash',
-                            },
+                        // No citations for greetings
+                        send('done', { done: true })
+                    } else {
+                        // ── Normal RAG query ──────────────────────────────
+                        // Call RAG pipeline, stream chunk by chunk
+                        const citations = await ragQuery({
+                            question,
+                            history,
+                            userId: user.id,
+                            orgId,
+                            userRole: userDiv.role,
+                            divisionId: userDiv.division_id,
+                            crossDivisionEnabled:
+                                orgConfig?.cross_division_query_enabled ?? false,
+                            onChunk: (text) => send('chunk', { text }),
+                            signal,
                         })
-                    } catch (logErr) {
-                        logger.warn('Failed to log AI usage', logErr)
-                    }
+
+                        // Send citations as final event
+                        send('citations', { citations })
+                        send('done', { done: true })
+
+                        // ── Persist messages to DB ───────────────────────────
+                        if (sessionId) {
+                            try {
+                                // Collect full response text for persistence
+                                // We need a separate mechanism since streaming already happened
+                                // The full text is reconstructed client-side and sent back,
+                                // but we can also reconstruct from the RAG pipeline
+                                // For now, save via a follow-up from the client
+
+                                // Auto-generate title if this is the first exchange
+                                const msgCount = await prisma.chatMessage.count({
+                                    where: { session_id: sessionId },
+                                })
+
+                                if (msgCount === 0) {
+                                    // Generate title from the first question
+                                    try {
+                                        const { getAIServiceForOrg } = await import('@/lib/ai/get-ai-service')
+                                        const ai = await getAIServiceForOrg(orgId)
+                                        const title = await ai.generateCompletion(
+                                            `Buatkan judul singkat (maksimal 6 kata, tanpa tanda kutip) untuk percakapan yang dimulai dengan pertanyaan: "${question.slice(0, 200)}"`,
+                                            { maxTokens: 30 }
+                                        )
+                                        const cleanTitle = title.trim().replace(/^["']|["']$/g, '').slice(0, 80)
+                                        await prisma.chatSession.update({
+                                            where: { id: sessionId },
+                                            data: { title: cleanTitle || question.slice(0, 50) },
+                                        })
+                                        send('title_updated', { title: cleanTitle || question.slice(0, 50) })
+                                    } catch (titleErr) {
+                                        logger.warn('Failed to generate chat title', titleErr)
+                                        // Fallback: use question as title
+                                        await prisma.chatSession.update({
+                                            where: { id: sessionId },
+                                            data: { title: question.slice(0, 50) },
+                                        })
+                                        send('title_updated', { title: question.slice(0, 50) })
+                                    }
+                                }
+                            } catch (persistErr) {
+                                logger.warn('Failed to persist chat session metadata', persistErr)
+                            }
+                        }
+
+                        // Log AI usage
+                        try {
+                            await prisma.aIUsageLog.create({
+                                data: {
+                                    organization_id: orgId,
+                                    user_id: user.id,
+                                    action_type: 'CHAT_QUERY',
+                                    tokens_used: Math.ceil(question.length / 3.5) * 3,
+                                    model_used: 'gemini-2.5-flash',
+                                },
+                            })
+                        } catch (logErr) {
+                            logger.warn('Failed to log AI usage', logErr)
+                        }
+                    } // end else (non-greeting)
                 } catch (err) {
                     if (!signal.aborted) {
                         console.error('[CHAT API] RAG pipeline error:', err)

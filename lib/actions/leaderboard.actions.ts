@@ -2,10 +2,22 @@
 
 import prisma from '@/lib/prisma'
 
-export async function getLeaderboardAction(orgId: string, limit: number = 20) {
+export async function getLeaderboardAction(orgId: string, limit: number = 20, divisionId?: string) {
     try {
+        // Build where clause
+        const where: any = { organization_id: orgId }
+
+        // If divisionId is provided, filter to users in that division
+        if (divisionId) {
+            where.user = {
+                user_divisions: {
+                    some: { division_id: divisionId }
+                }
+            }
+        }
+
         const topUsers = await prisma.userPoints.findMany({
-            where: { organization_id: orgId },
+            where,
             include: {
                 user: {
                     include: {

@@ -13,7 +13,7 @@ import { RoleGuard } from '@/components/shared/RoleGuard'
 import { Settings, ToggleLeft, ToggleRight, Plus, Save, Building2, Users, FolderTree, FileText, Shield } from 'lucide-react'
 
 export default function SettingsPage() {
-    const { organization, user } = useCurrentUser()
+    const { organization, user, refresh } = useCurrentUser()
     const [flags, setFlags] = useState<any[]>([])
     const [org, setOrg] = useState<any>(null)
     const [loading, setLoading] = useState(true)
@@ -66,7 +66,8 @@ export default function SettingsPage() {
             crossDivisionQueryEnabled: crossDiv
         })
         setSaving(false)
-        alert('Settings saved!')
+        // Refresh user context so sidebar picks up org name change instantly
+        await refresh()
     }
 
     return (

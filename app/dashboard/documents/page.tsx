@@ -21,17 +21,30 @@ const formatFileSize = (bytes: number) => {
 }
 
 export default function DocumentsPage() {
-    const { organization, user, role } = useCurrentUser()
+    const { organization, user, role, division } = useCurrentUser()
     const [documents, setDocuments] = useState<any[]>([])
     const [divisions, setDivisions] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
+    const isStaff = role === 'STAFF'
     const [filterDiv, setFilterDiv] = useState('')
+    const [initialized, setInitialized] = useState(false)
+
+    // Auto-set division filter for STAFF role
+    useEffect(() => {
+        if (!initialized && division?.id) {
+            if (isStaff) {
+                setFilterDiv(division.id)
+            }
+            setInitialized(true)
+        }
+    }, [division?.id, isStaff, initialized])
 
     const loadData = async () => {
         if (!organization?.id) return
+        const effectiveDiv = isStaff ? (division?.id || filterDiv) : (filterDiv || undefined)
         const [docsRes, divsRes] = await Promise.all([
-            getDocumentsAction(organization.id, filterDiv || undefined),
+            getDocumentsAction(organization.id, effectiveDiv),
             getDivisionsAction(organization.id)
         ])
         if (docsRes.success) setDocuments(docsRes.data || [])
@@ -39,7 +52,7 @@ export default function DocumentsPage() {
         setLoading(false)
     }
 
-    useEffect(() => { loadData() }, [organization?.id, filterDiv])
+    useEffect(() => { loadData() }, [organization?.id, filterDiv, division?.id])
 
     // Auto-poll if there are any unprocessed documents to show progress
     useEffect(() => {
@@ -92,17 +105,19 @@ export default function DocumentsPage() {
                             className="input-field pl-10"
                         />
                     </div>
-                    <div className="flex items-center gap-3">
-                        <Filter size={16} className="text-text-300" />
-                        <select
-                            value={filterDiv}
-                            onChange={(e) => setFilterDiv(e.target.value)}
-                            className="border border-surface-200 rounded-md p-2 text-sm bg-white focus:ring-navy-600 focus:border-navy-600"
-                        >
-                            <option value="">All Divisions</option>
-                            {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                        </select>
-                    </div>
+                    {!isStaff && (
+                        <div className="flex items-center gap-3">
+                            <Filter size={16} className="text-text-300" />
+                            <select
+                                value={filterDiv}
+                                onChange={(e) => setFilterDiv(e.target.value)}
+                                className="border border-surface-200 rounded-md p-2 text-sm bg-white focus:ring-navy-600 focus:border-navy-600"
+                            >
+                                <option value="">All Divisions</option>
+                                {divisions.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        </div>
+                    )}
                 </div>
 
                 <div className="p-6 bg-surface-50 min-h-[50vh]">

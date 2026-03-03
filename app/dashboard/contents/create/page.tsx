@@ -11,7 +11,7 @@ import { TiptapEditor } from '@/components/editor/TiptapEditor'
 
 export default function CreateContentPage() {
     const router = useRouter()
-    const { user, organization } = useCurrentUser()
+    const { user, organization, role, division } = useCurrentUser()
 
     const [title, setTitle] = useState('')
     const [category, setCategory] = useState('Standard Operating Procedure')
@@ -22,11 +22,21 @@ export default function CreateContentPage() {
 
     const [divisions, setDivisions] = useState<any[]>([])
 
+    // Roles that must be locked to their own division
+    const isDivisionLocked = role === 'SUPERVISOR' || role === 'GROUP_ADMIN' || role === 'STAFF'
+
     // Source Selection Modal
     const [isSourceModalOpen, setIsSourceModalOpen] = useState(false)
     const [documents, setDocuments] = useState<any[]>([])
     const [selectedSources, setSelectedSources] = useState<string[]>([])
     const [docSearch, setDocSearch] = useState('')
+
+    // Auto-set division for locked roles
+    useEffect(() => {
+        if (isDivisionLocked && division?.id) {
+            setDivisionId(division.id)
+        }
+    }, [isDivisionLocked, division?.id])
 
     useEffect(() => {
         if (organization?.id) {
@@ -159,14 +169,22 @@ export default function CreateContentPage() {
                                         required
                                         value={divisionId}
                                         onChange={(e) => setDivisionId(e.target.value)}
-                                        className="w-full border-surface-200 border rounded-md p-2.5 focus:ring-navy-600 focus:border-navy-600 bg-white"
+                                        disabled={isDivisionLocked}
+                                        className={`w-full border-surface-200 border rounded-md p-2.5 focus:ring-navy-600 focus:border-navy-600 bg-white ${isDivisionLocked ? 'opacity-60 cursor-not-allowed bg-surface-50' : ''}`}
                                     >
                                         <option value="" disabled>Select Division...</option>
-                                        <option value="global" className="font-bold">🌐 Global Organization (All)</option>
+                                        {!isDivisionLocked && (
+                                            <option value="global" className="font-bold">🌐 Global Organization (All)</option>
+                                        )}
                                         {divisions.map(d => (
                                             <option key={d.id} value={d.id}>{d.name}</option>
                                         ))}
                                     </select>
+                                    {isDivisionLocked && (
+                                        <p className="text-xs text-text-400">
+                                            🔒 Konten hanya dapat dibuat untuk divisi Anda sendiri.
+                                        </p>
+                                    )}
                                 </div>
 
                                 <div className="space-y-2">

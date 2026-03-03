@@ -1,16 +1,15 @@
 'use client'
 
-import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { useCurrentUser, UserProvider } from '@/hooks/useCurrentUser'
 import { ReactNode, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
     Home, FileText, Tags, Bot, Award, FileQuestion, Users,
     Network, CreditCard, Activity, CheckSquare, ListTodo,
-    Shield, FolderTree, Settings, Menu
+    Shield, FolderTree, Settings, Menu, Sparkles, Wrench
 } from 'lucide-react'
 import { NotificationBell } from '@/components/shared/NotificationBell'
-import ChatPanel from '@/components/chat/ChatPanel'
 
 // Icon mapping function
 const getIconForLabel = (label: string) => {
@@ -20,6 +19,8 @@ const getIconForLabel = (label: string) => {
         case 'Quizzes': return <FileQuestion size={16} />
         case 'Leaderboard': return <Award size={16} />
         case 'FAQs / Help': return <Bot size={16} />
+        case 'AI Assistant': return <Sparkles size={16} />
+        case 'Maintenance': return <Wrench size={16} />
         case 'Approvals': return <CheckSquare size={16} />
         case 'Read Trackers': return <Activity size={16} />
         case 'Suggestions': return <ListTodo size={16} />
@@ -41,6 +42,7 @@ const getNavLinks = (role?: string) => {
     const base = [
         { label: 'Documents', href: '/dashboard/documents' },
         { label: 'Knowledge Base', href: '/dashboard/contents' },
+        { label: 'AI Assistant', href: '/dashboard/ai-assistant' },
         { label: 'Quizzes', href: '/dashboard/quizzes' },
         { label: 'Leaderboard', href: '/dashboard/leaderboard' },
         { label: 'FAQs / Help', href: '/dashboard/faqs' }
@@ -57,6 +59,7 @@ const getNavLinks = (role?: string) => {
             { label: 'Billing', href: '/dashboard/hrd/billing' },
             { label: 'AI Usage', href: '/dashboard/hrd/ai-usage' },
             { label: 'AI Settings', href: '/dashboard/hrd/ai-settings' },
+            { label: 'Maintenance', href: '/dashboard/hrd/maintenance' },
             { label: 'Settings', href: '/dashboard/hrd/settings' },
         ]
     }
@@ -83,7 +86,7 @@ const getNavLinks = (role?: string) => {
     return base
 }
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+function DashboardLayoutInner({ children }: { children: ReactNode }) {
     const { user, role, organization, isLoading } = useCurrentUser()
     const pathname = usePathname()
 
@@ -187,8 +190,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 </main>
             </div>
 
-            {/* AI Knowledge Assistant (floating) */}
-            <ChatPanel />
+
         </div>
+    )
+}
+
+export default function DashboardLayout({ children }: { children: ReactNode }) {
+    return (
+        <UserProvider>
+            <DashboardLayoutInner>{children}</DashboardLayoutInner>
+        </UserProvider>
     )
 }
