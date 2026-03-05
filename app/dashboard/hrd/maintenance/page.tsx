@@ -44,16 +44,20 @@ export default function MaintenancePage() {
 
     const loadDbStats = async () => {
         try {
+            setDbStats({ loading: true })
             const res = await fetch('/api/admin/backup')
             if (res.ok) {
                 const data = await res.json()
                 setDbStats(data)
+            } else {
+                setDbStats(null)
             }
-        } catch { }
+        } catch {
+            setDbStats(null)
+        }
     }
 
     useEffect(() => { loadData() }, [organization?.id])
-    useEffect(() => { loadDbStats() }, [])
 
     const handleToggleFlag = async (flagId: string, currentVal: boolean) => {
         const res = await toggleFeatureFlagAction(flagId, !currentVal)
@@ -381,12 +385,29 @@ export default function MaintenancePage() {
                             </div>
 
                             {/* DB Stats */}
-                            {dbStats && (
-                                <div className="card p-5 space-y-3">
-                                    <h3 className="font-bold font-display text-navy-900 flex items-center gap-2 text-sm">
+                            <div className="card p-5 space-y-3">
+                                <h3 className="font-bold font-display text-navy-900 flex items-center justify-between gap-2 text-sm">
+                                    <span className="flex items-center gap-2">
                                         <Database size={14} className="text-navy-600" /> Database Stats
-                                    </h3>
-                                    <div className="space-y-1.5">
+                                    </span>
+                                    {!dbStats && (
+                                        <button
+                                            onClick={loadDbStats}
+                                            className="text-xs font-semibold text-navy-600 hover:text-navy-700 bg-navy-50 hover:bg-navy-100 px-2.5 py-1 rounded transition"
+                                        >
+                                            Muat Data
+                                        </button>
+                                    )}
+                                </h3>
+
+                                {!dbStats ? (
+                                    <p className="text-xs text-text-400">Klik "Muat Data" untuk melihat statistik database saat ini.</p>
+                                ) : dbStats?.loading ? (
+                                    <div className="flex items-center justify-center p-4">
+                                        <Loader2 size={24} className="text-navy-400 animate-spin" />
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1.5 pt-2">
                                         {Object.entries(dbStats.tables || {}).map(([key, val]) => (
                                             <div key={key} className="flex justify-between text-xs">
                                                 <span className="text-text-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
@@ -398,8 +419,8 @@ export default function MaintenancePage() {
                                             <span className="text-navy-900 font-mono">{dbStats.totalRecords}</span>
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             {/* Quick Stats */}
                             <div className="card p-5 text-center">
