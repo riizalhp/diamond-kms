@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { RoleGuard } from '@/components/shared/RoleGuard'
 import { getUsersAction, getDivisionsAction } from '@/lib/actions/user.actions'
-import InviteUserModal from '@/components/users/InviteUserModal'
 import EditUserModal from '@/components/users/EditUserModal'
-import { Search, Plus } from 'lucide-react'
+import { Search, Plus, UserPlus } from 'lucide-react'
+import Link from 'next/link'
 
 export default function UsersPage() {
     const { organization, role } = useCurrentUser()
@@ -14,7 +14,6 @@ export default function UsersPage() {
     const [divisions, setDivisions] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
-    const [isInviteOpen, setIsInviteOpen] = useState(false)
     const [editingUser, setEditingUser] = useState<any>(null)
     const [searchTerm, setSearchTerm] = useState('')
 
@@ -22,7 +21,7 @@ export default function UsersPage() {
         if (organization?.id) {
             loadData()
         }
-    }, [organization?.id, isInviteOpen, editingUser]) // reload when modals close
+    }, [organization?.id, editingUser]) // reload when modal close
 
     const loadData = async () => {
         if (!organization?.id) return
@@ -44,12 +43,12 @@ export default function UsersPage() {
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
                     <h1 className="text-2xl font-bold font-display text-navy-900">User Management</h1>
-                    <button
-                        onClick={() => setIsInviteOpen(true)}
-                        className="btn btn-primary"
+                    <Link
+                        href="/dashboard/hrd/users/new"
+                        className="btn btn-primary flex flex-row items-center gap-2"
                     >
-                        <Plus size={18} /> Buat User
-                    </button>
+                        <UserPlus size={18} /> Buat User
+                    </Link>
                 </div>
 
                 <div className="card">
@@ -61,7 +60,7 @@ export default function UsersPage() {
                                 placeholder="Search users..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 pr-4 py-2 border rounded-md w-full focus:ring-navy-600 focus:border-navy-600"
+                                className="pl-10 pr-4 py-2 border rounded-md w-full focus:ring-navy-600 focus:border-navy-600 outline-none"
                             />
                         </div>
                         <div className="text-sm text-text-500">
@@ -72,11 +71,11 @@ export default function UsersPage() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-surface-50 text-text-500 text-sm">
-                                <th className="p-4 font-medium">Name</th>
-                                <th className="p-4 font-medium">Role</th>
-                                <th className="p-4 font-medium">Division</th>
-                                <th className="p-4 font-medium">Status</th>
-                                <th className="p-4 font-medium w-32">Actions</th>
+                                <th className="p-4 font-medium border-b">Name</th>
+                                <th className="p-4 font-medium border-b">Role</th>
+                                <th className="p-4 font-medium border-b">Division</th>
+                                <th className="p-4 font-medium border-b">Status</th>
+                                <th className="p-4 font-medium border-b w-32">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -86,7 +85,7 @@ export default function UsersPage() {
                                 <tr><td colSpan={5} className="p-8 text-center text-text-500">No users found.</td></tr>
                             ) : (
                                 filteredUsers.map((u) => (
-                                    <tr key={u.id} className="border-t hover:bg-surface-50">
+                                    <tr key={u.id} className="border-b last:border-none hover:bg-surface-50">
                                         <td className="p-4">
                                             <div className="font-medium text-navy-900">{u.full_name}</div>
                                             <div className="text-sm text-text-500">{u.job_title}</div>
@@ -100,13 +99,15 @@ export default function UsersPage() {
                                             {u.user_divisions?.[0]?.division?.name || '-'}
                                         </td>
                                         <td className="p-4">
-                                            <span className={`inline-block w-2.5 h-2.5 rounded-full mr-2 ${u.is_active ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                            <span className="text-sm text-text-500">{u.is_active ? 'Active' : 'Inactive'}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className={`w-2 h-2 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                                <span className="text-sm text-text-500">{u.is_active ? 'Active' : 'Inactive'}</span>
+                                            </div>
                                         </td>
                                         <td className="p-4">
                                             <button
                                                 onClick={() => setEditingUser(u)}
-                                                className="text-navy-600 hover:underline text-sm font-medium"
+                                                className="text-navy-600 hover:text-navy-700 hover:underline text-sm font-medium transition-colors"
                                             >
                                                 Edit
                                             </button>
@@ -117,13 +118,6 @@ export default function UsersPage() {
                         </tbody>
                     </table>
                 </div>
-
-                <InviteUserModal
-                    isOpen={isInviteOpen}
-                    onClose={() => setIsInviteOpen(false)}
-                    divisions={divisions}
-                    creatorRole={role}
-                />
 
                 <EditUserModal
                     isOpen={!!editingUser}

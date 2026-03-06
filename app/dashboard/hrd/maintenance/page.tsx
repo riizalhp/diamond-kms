@@ -12,6 +12,7 @@ import {
     Shield, ToggleLeft, ToggleRight, Plus, AlertTriangle,
     Bell, Database, Wrench, Clock, Download, Upload, CheckCircle, Loader2, FileDown, FileUp
 } from 'lucide-react'
+import { ErrorLogsSection } from './ErrorLogsSection'
 
 export default function MaintenancePage() {
     const { organization } = useCurrentUser()
@@ -290,6 +291,9 @@ export default function MaintenancePage() {
                                     </button>
                                 </div>
                             </div>
+
+                            {/* Error Logs Section */}
+                            <ErrorLogsSection />
                         </div>
 
                         {/* Right Sidebar */}

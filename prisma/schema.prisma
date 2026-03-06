@@ -556,3 +556,22 @@ model ContentRelationship {
   @@index([target_entity_id])
   @@map("content_relationships")
 }
+
+model ErrorLog {
+  id               String   @id @default(uuid())
+  level            String   // ERROR, WARN, INFO
+  source           String   // e.g., 'API /admin/backup', 'Client Form'
+  message          String   @db.Text
+  stack_trace      String?  @db.Text
+  url              String?  @db.Text
+  method           String?  // GET, POST
+  user_id          String?
+  organization_id  String?
+  metadata         Json?
+  created_at       DateTime @default(now())
+
+  @@index([level])
+  @@index([created_at])
+  @@index([organization_id])
+  @@map("error_logs")
+}

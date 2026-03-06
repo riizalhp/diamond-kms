@@ -3,14 +3,17 @@ import { createClient } from '@/lib/supabase/server'
 import prisma from '@/lib/prisma'
 
 export async function GET() {
+    console.log('[API auth/me] Starting request');
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
+    console.log('[API auth/me] Supabase User:', user?.id);
 
     if (!user) {
         return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
     try {
+        console.log('[API auth/me] Fetching Prisma User Profile...');
         const userProfile = await prisma.user.findUnique({
             where: { id: user.id },
             include: {

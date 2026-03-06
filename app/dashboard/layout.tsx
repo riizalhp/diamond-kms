@@ -32,7 +32,9 @@ const getIconForLabel = (label: string) => {
         case 'Organizations': return <FolderTree size={16} />
         case 'Feature Flags': return <Settings size={16} />
         case 'AI Providers': return <Bot size={16} />
+        case 'AI Management': return <Sparkles size={16} />
         case 'Logs': return <Activity size={16} />
+        case 'Dashboard': return <Home size={16} />
         default: return <FileText size={16} />
     }
 }
@@ -40,6 +42,7 @@ const getIconForLabel = (label: string) => {
 // Simple sidebar mapping based on roles
 const getNavLinks = (role?: string) => {
     const base = [
+        { label: 'Dashboard', href: '/dashboard' },
         { label: 'Documents', href: '/dashboard/documents' },
         { label: 'Knowledge Base', href: '/dashboard/contents' },
         { label: 'AI Assistant', href: '/dashboard/ai-assistant' },
@@ -57,8 +60,7 @@ const getNavLinks = (role?: string) => {
             { label: 'Users', href: '/dashboard/hrd/users' },
             { label: 'Divisions', href: '/dashboard/hrd/divisions' },
             { label: 'Billing', href: '/dashboard/hrd/billing' },
-            { label: 'AI Usage', href: '/dashboard/hrd/ai-usage' },
-            { label: 'AI Settings', href: '/dashboard/hrd/ai-settings' },
+            { label: 'AI Management', href: '/dashboard/hrd/ai' },
             { label: 'Settings', href: '/dashboard/hrd/settings' },
             // Dipisah (di sidebar root level) sesuai feedback QC
             { label: 'Maintenance', href: '/dashboard/maintenance' },
@@ -140,7 +142,7 @@ function DashboardLayoutInner({ children }: { children: ReactNode }) {
                 {/* Navigation Links */}
                 <nav className="flex-1 px-3 py-2 flex flex-col gap-1 overflow-y-auto scrollbar-thin">
                     {navLinks.map(link => {
-                        const isActive = pathname.startsWith(link.href)
+                        const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href)
                         return (
                             <Link
                                 key={link.href}

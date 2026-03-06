@@ -36,8 +36,6 @@ export async function loginAction(formData: FormData) {
         const role = user.user_divisions[0].role
         switch (role) {
             case Role.SUPER_ADMIN:
-                redirectTo = '/dashboard/hrd/users'
-                break
             case Role.GROUP_ADMIN:
             case Role.SUPERVISOR:
             case Role.STAFF:
