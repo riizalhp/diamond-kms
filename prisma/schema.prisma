@@ -609,3 +609,4 @@ enum NotificationType {
   BILLING_REMINDER
   REVISION_SUGGESTION
 }
+

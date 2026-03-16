@@ -26,7 +26,7 @@ export default function CreateDivisionPage() {
         if (res.success) {
             setStatus({ type: 'success', msg: 'Divisi berhasil dibuat! Mengalihkan...' })
             setTimeout(() => {
-                router.push('/dashboard/hrd/divisions')
+                router.push('/dashboard/hrd/users/divisions')
                 router.refresh()
             }, 1000)
         } else {
@@ -38,7 +38,7 @@ export default function CreateDivisionPage() {
         <RoleGuard allowedRoles={['SUPER_ADMIN']}>
             <div className="space-y-6 max-w-3xl animate-in fade-in duration-300">
                 <div className="flex items-center gap-4">
-                    <Link href="/dashboard/hrd/divisions" className="p-2 hover:bg-surface-100 rounded-lg transition-colors text-text-500 hover:text-navy-700">
+                    <Link href="/dashboard/hrd/users/divisions" className="p-2 hover:bg-surface-100 rounded-lg transition-colors text-text-500 hover:text-navy-700">
                         <ArrowLeft size={20} />
                     </Link>
                     <div>
@@ -53,8 +53,8 @@ export default function CreateDivisionPage() {
                 <div className="card p-6">
                     {status.msg && (
                         <div className={`p-4 rounded-lg mb-6 text-sm font-medium border ${status.type === 'error' ? 'bg-danger-bg text-danger border-red-200'
-                                : status.type === 'success' ? 'bg-success-bg text-success border-green-200'
-                                    : 'bg-info-bg text-info border-blue-200'
+                            : status.type === 'success' ? 'bg-success-bg text-success border-green-200'
+                                : 'bg-info-bg text-info border-blue-200'
                             }`}>
                             <div className="flex items-center gap-2">
                                 {status.type === 'loading' && <Loader2 size={16} className="animate-spin" />}
@@ -91,7 +91,7 @@ export default function CreateDivisionPage() {
 
                         <div className="flex justify-end gap-3 pt-4 border-t border-surface-200">
                             <Link
-                                href="/dashboard/hrd/divisions"
+                                href="/dashboard/hrd/users/divisions"
                                 className="btn border border-surface-300 bg-white text-text-700 hover:bg-surface-50"
                             >
                                 Batal

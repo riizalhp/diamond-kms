@@ -6,30 +6,32 @@ import { revalidatePath } from 'next/cache'
 export async function getQuizzesAction(orgId: string, divisionId?: string) {
     try {
         const where: any = { organization_id: orgId }
-        if (divisionId) where.division_id = divisionId
+        
+        if (divisionId && divisionId !== 'ALL') {
+            where.division_id = divisionId
+        }
 
         const quizzes = await prisma.quiz.findMany({
             where,
-            include: {
-                division: true,
-                content: true,
-                _count: { select: { questions: true, results: true } }
+            select: {
+                id: true,
+                title: true,
+                description: true,
+                is_published: true,
+                time_limit_minutes: true,
+                division_id: true,
+                created_by: true,
+                notes: true,
+                _count: {
+                    select: { questions: true }
+                }
             },
             orderBy: { created_at: 'desc' }
         })
 
-        // Fetch authors
-        const userIds = quizzes.map(q => q.created_by)
-        const users = await prisma.user.findMany({ where: { id: { in: userIds } } })
-        const userMap = users.reduce((acc, user) => ({ ...acc, [user.id]: user.full_name }), {} as Record<string, string>)
-
-        const data = quizzes.map(q => ({
-            ...q,
-            author_name: userMap[q.created_by] || 'Unknown Author'
-        }))
-
-        return { success: true, data }
+        return { success: true, data: quizzes }
     } catch (error: any) {
+        console.error('[getQuizzesAction] Error:', error)
         return { success: false, error: error.message }
     }
 }
@@ -54,12 +56,12 @@ export async function getQuizByIdAction(id: string) {
 export async function createQuizAction(data: {
     title: string
     description?: string
-    timeLimit?: number
-    divisionId: string
-    contentId?: string
-    orgId: string
-    userId: string
-    isPublished?: boolean
+    time_limit_minutes?: number
+    division_id: string
+    content_id?: string
+    organization_id: string
+    created_by: string
+    is_published?: boolean
     questions: Array<{
         question_text: string
         options: string[]
@@ -67,16 +69,25 @@ export async function createQuizAction(data: {
     }>
 }) {
     try {
+        // RBAC: Check role for publication (User model doesn't have role directly)
+        const userDivisions = await prisma.userDivision.findMany({
+            where: { user_id: data.created_by },
+            select: { role: true }
+        })
+        const canPublish = userDivisions.some(ud => ud.role === 'GROUP_ADMIN' || ud.role === 'SUPER_ADMIN')
+        
+        const finalIsPublished = canPublish ? (data.is_published || false) : false
+
         const quiz = await prisma.quiz.create({
             data: {
                 title: data.title,
                 description: data.description,
-                time_limit_minutes: data.timeLimit,
-                division_id: data.divisionId,
-                content_id: data.contentId || undefined,
-                organization_id: data.orgId,
-                created_by: data.userId,
-                is_published: data.isPublished || false,
+                time_limit_minutes: data.time_limit_minutes,
+                division_id: data.division_id,
+                content_id: data.content_id || undefined,
+                organization_id: data.organization_id,
+                created_by: data.created_by,
+                is_published: finalIsPublished,
                 questions: {
                     create: data.questions.map((q, i) => ({
                         question_text: q.question_text,
@@ -153,5 +164,119 @@ export async function deleteQuizAction(id: string) {
         return { success: true }
     } catch (error: any) {
         return { success: false, error: error.message }
+    }
+}
+export async function updateQuizFullAction(id: string, data: {
+    title: string
+    description?: string
+    time_limit_minutes?: number
+    division_id: string
+    content_id?: string
+    is_published?: boolean
+    questions: Array<{
+        id?: string
+        question_text: string
+        options: string[]
+        correct_answer: string
+    }>
+    created_by?: string
+}) {
+    try {
+        if (data.is_published && data.created_by) {
+            const userDivisions = await prisma.userDivision.findMany({
+                where: { user_id: data.created_by },
+                select: { role: true }
+            })
+            const canPublish = userDivisions.some(ud => ud.role === 'GROUP_ADMIN' || ud.role === 'SUPER_ADMIN')
+            
+            if (!canPublish) {
+                // If supervisor tries to publish, force to false or throw error
+                // Force to false is safer for now to prevent accidental publication
+                data.is_published = false
+            }
+        }
+        const result = await prisma.$transaction(async (tx) => {
+            const quiz = await tx.quiz.update({
+                where: { id },
+                data: {
+                    title: data.title,
+                    description: data.description,
+                    time_limit_minutes: data.time_limit_minutes,
+                    division_id: data.division_id,
+                    content_id: data.content_id || null,
+                    is_published: data.is_published,
+                }
+            })
+
+            await tx.quizQuestion.deleteMany({
+                where: { quiz_id: id }
+            })
+
+            await tx.quizQuestion.createMany({
+                data: data.questions.map((q, i) => ({
+                    quiz_id: id,
+                    question_text: q.question_text,
+                    question_type: 'MULTIPLE_CHOICE',
+                    options: q.options,
+                    correct_answer: q.correct_answer,
+                    order_index: i
+                }))
+            })
+
+            return quiz
+        })
+
+        revalidatePath('/dashboard/quizzes')
+        revalidatePath(`/dashboard/quizzes/create?edit=${id}`)
+        return { success: true, data: result }
+    } catch (error: any) {
+        console.error("Quiz update error:", error)
+        return { success: false, error: error.message }
+    }
+}
+
+export async function updateQuizAction(id: string, data: {
+    is_published?: boolean
+    notes?: string
+    created_by?: string
+}) {
+    try {
+        if (data.is_published && data.created_by) {
+            const userDivisions = await prisma.userDivision.findMany({
+                where: { user_id: data.created_by },
+                select: { role: true }
+            })
+            const canPublish = userDivisions.some(ud => ud.role === 'GROUP_ADMIN' || ud.role === 'SUPER_ADMIN')
+            
+            if (!canPublish) {
+                throw new Error("Unauthorized to publish. Only Admin can approve quizzes.")
+            }
+        }
+        const updateData: any = {}
+        if (data.is_published !== undefined) updateData.is_published = data.is_published
+        if (data.notes !== undefined) updateData.notes = data.notes
+
+        const quiz = await prisma.quiz.update({
+            where: { id },
+            data: updateData
+        })
+        revalidatePath('/dashboard/quizzes')
+        return { success: true, data: quiz }
+    } catch (error: any) {
+        return { success: false, error: error.message }
+    }
+}
+
+export async function updateQuizNoteAction(id: string, notes: string) {
+    try {
+        await prisma.quiz.update({
+            where: { id },
+            data: { notes }
+        })
+        revalidatePath('/dashboard/quizzes')
+        return { success: true }
+    } catch (error: any) {
+        console.error("Gagal update catatan:", error)
+        return { success: false, error: "Gagal update catatan" }
     }
 }

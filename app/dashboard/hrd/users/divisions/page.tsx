@@ -40,14 +40,19 @@ export default function DivisionsPage() {
         <RoleGuard allowedRoles={['SUPER_ADMIN']}>
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold font-display text-navy-900">Division Management</h1>
+                    <div>
+                        <h1 className="text-2xl font-bold font-display text-navy-900">User Management</h1>
+                        <p className="text-sm text-text-500 mt-1">Kelola anggota tim dan divisi organisasi Anda.</p>
+                    </div>
                     <Link
-                        href="/dashboard/hrd/divisions/new"
+                        href="/dashboard/hrd/users/divisions/new"
                         className="btn btn-primary flex flex-row items-center gap-2"
                     >
                         <Plus size={18} /> Add Division
                     </Link>
                 </div>
+
+                {/* Navigation tabs removed - moved to sidebar */}
 
                 <div className="card">
                     <table className="w-full text-left border-collapse">

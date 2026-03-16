@@ -85,7 +85,7 @@ export default function LeaderboardPage() {
                             <h3 className="text-text-300 font-medium mb-1">Your Standing</h3>
                             <div className="flex items-end gap-3 mt-2">
                                 <div className="text-4xl font-black">
-                                    {leaders.find(l => l.id === user.id)?.points || 0}
+                                    {leaders.find(l => l.userId === user.id)?.points || 0}
                                 </div>
                                 <div className="text-text-300 mb-1">PTS</div>
                             </div>
@@ -121,7 +121,7 @@ export default function LeaderboardPage() {
                         ) : (
                             <ul className="divide-y divide-slate-100">
                                 {leaders.map((leader, index) => {
-                                    const isMe = user?.id === leader.id
+                                    const isMe = user?.id === leader.userId
                                     return (
                                         <li
                                             key={leader.id}

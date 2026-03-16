@@ -3,14 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { RoleGuard } from '@/components/shared/RoleGuard'
-import { getUsersAction, getDivisionsAction } from '@/lib/actions/user.actions'
+import { getUsersAction } from '@/lib/actions/user.actions'
 import { Search, Plus, UserPlus } from 'lucide-react'
 import Link from 'next/link'
 
 export default function UsersPage() {
     const { organization, role } = useCurrentUser()
     const [users, setUsers] = useState<any[]>([])
-    const [divisions, setDivisions] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
     const [searchTerm, setSearchTerm] = useState('')
@@ -23,12 +22,8 @@ export default function UsersPage() {
 
     const loadData = async () => {
         if (!organization?.id) return
-        const [usersRes, divRes] = await Promise.all([
-            getUsersAction(organization.id),
-            getDivisionsAction(organization.id)
-        ])
-        if (usersRes.success) setUsers(usersRes.data || [])
-        if (divRes.success) setDivisions(divRes.data || [])
+        const res = await getUsersAction(organization.id)
+        if (res.success) setUsers(res.data || [])
         setLoading(false)
     }
 
@@ -40,7 +35,10 @@ export default function UsersPage() {
         <RoleGuard allowedRoles={['SUPER_ADMIN', 'GROUP_ADMIN']}>
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold font-display text-navy-900">User Management</h1>
+                    <div>
+                        <h1 className="text-2xl font-bold font-display text-navy-900">User Management</h1>
+                        <p className="text-sm text-text-500 mt-1">Kelola anggota tim dan divisi organisasi Anda.</p>
+                    </div>
                     <Link
                         href="/dashboard/hrd/users/new"
                         className="btn btn-primary flex flex-row items-center gap-2"
@@ -48,6 +46,8 @@ export default function UsersPage() {
                         <UserPlus size={18} /> Buat User
                     </Link>
                 </div>
+
+                {/* Navigation tabs removed - moved to sidebar */}
 
                 <div className="card">
                     <div className="p-4 border-b flex justify-between items-center">

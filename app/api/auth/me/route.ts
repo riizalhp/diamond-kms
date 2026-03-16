@@ -32,7 +32,7 @@ export async function GET() {
         })
 
         if (!userProfile) {
-            return NextResponse.json({ success: false, error: 'User profile not found in DB' }, { status: 404 })
+            return NextResponse.json({ success: false, error: 'User profile not found in DB' }, { status: 401 })
         }
 
         const primaryDivision = userProfile.user_divisions[0]

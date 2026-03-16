@@ -1,0 +1,30 @@
+﻿model Quiz {
+  id                 String         @id @default(uuid())
+  organization_id    String
+  division_id        String
+  created_by         String
+  title              String
+  description        String?
+  time_limit_minutes Int?
+  is_published       Boolean        @default(false)
+  content_id         String?
+  created_at         DateTime       @default(now())
+  questions          QuizQuestion[]
+  results            QuizResult[]
+  content            Content?       @relation(fields: [content_id], references: [id], onDelete: Cascade)
+  division           Division       @relation(fields: [division_id], references: [id], onDelete: Cascade)
+  organization       Organization   @relation(fields: [organization_id], references: [id], onDelete: Cascade)
+
+  @@index([organization_id])
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id             String @id @default(uuid())
+  quiz_id        String
+  question_text  String
+  question_type  String
+  options        Json
+  correct_answer String
+  order_index    Int
+  quiz           Quiz   @relation(fields: [quiz_id], references: [id], onDelete: Cascade)

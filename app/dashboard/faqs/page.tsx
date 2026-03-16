@@ -10,32 +10,25 @@ export default function FAQsPage() {
     const { organization, user, role } = useCurrentUser()
 
     const [faqs, setFaqs] = useState<any[]>([])
-    const [divisions, setDivisions] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState('')
 
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [saving, setSaving] = useState(false)
-    const [formData, setFormData] = useState({ question: '', answer: '', divisionId: '' })
+    const [formData, setFormData] = useState({ question: '', answer: '' })
 
     // Accordion state
     const [openIndex, setOpenIndex] = useState<string | null>(null)
 
+    const isFull = faqs.length >= 10
+
     const loadData = async () => {
         if (!organization?.id) return
+        setLoading(true)
 
-        const [faqsRes, divsRes] = await Promise.all([
-            getFAQsAction(organization.id),
-            getDivisionsAction(organization.id)
-        ])
-
-        if (faqsRes.success) setFaqs(faqsRes.data || [])
-        if (divsRes.success) {
-            setDivisions(divsRes.data || [])
-            if (divsRes.data && divsRes.data.length > 0) {
-                setFormData(prev => ({ ...prev, divisionId: divsRes.data![0].id }))
-            }
-        }
+        const res = await getFAQsAction(organization.id)
+        if (res.success) setFaqs(res.data || [])
+        
         setLoading(false)
     }
 
@@ -46,19 +39,22 @@ export default function FAQsPage() {
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!user || !organization) return
+        if (isFull) {
+            alert("Kuota FAQ Penuh (Maks 10)")
+            return
+        }
         setSaving(true)
 
         const res = await createFAQAction({
             question: formData.question,
             answer: formData.answer,
-            divisionId: formData.divisionId,
             orgId: organization.id,
             userId: user.id
         })
 
         if (res.success) {
             setIsModalOpen(false)
-            setFormData(prev => ({ ...prev, question: '', answer: '' }))
+            setFormData({ question: '', answer: '' })
             loadData()
         } else {
             alert(res.error || 'Failed to create FAQ')
@@ -67,7 +63,7 @@ export default function FAQsPage() {
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm('Delete this FAQ?')) return
+        if (!confirm('Hapus FAQ ini?')) return
         const res = await deleteFAQAction(id)
         if (res.success) {
             loadData()
@@ -76,150 +72,153 @@ export default function FAQsPage() {
         }
     }
 
-    // Group FAQs by division
-    const filteredFaqs = faqs.filter(f =>
-        f.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        f.answer.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredFaqs = faqs.filter(faq => 
+        faq.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        faq.answer.toLowerCase().includes(searchTerm.toLowerCase())
     )
-
-    const faqsByDivision = filteredFaqs.reduce((acc: any, faq: any) => {
-        const divName = faq.division?.name || 'General'
-        if (!acc[divName]) acc[divName] = []
-        acc[divName].push(faq)
-        return acc
-    }, {})
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            <div className="flex justify-between items-center bg-navy-600 rounded-xl p-8 text-white shadow-sm mb-8">
-                <div>
-                    <h1 className="text-3xl font-bold font-display flex items-center gap-3 mb-2">
+            <div className="flex justify-between items-center banner-primary rounded-3xl p-8 text-white shadow-xl shadow-navy-900/10 mb-8 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none translate-x-1/4 -translate-y-1/4">
+                    <HelpCircle size={200} />
+                </div>
+                <div className="relative z-10">
+                    <h1 className="text-3xl font-black font-display flex items-center gap-3 mb-2 text-white">
                         <HelpCircle size={32} /> Help Center & FAQs
                     </h1>
-                    <p className="text-blue-100 max-w-lg">Quick answers to common questions. Find what you need without having to read through entire manuals.</p>
+                    <p className="text-white/80 font-medium max-w-lg leading-relaxed">Jawaban cepat untuk pertanyaan yang sering diajukan. Temukan informasi yang Anda butuhkan secara instan.</p>
                 </div>
                 {['SUPER_ADMIN', 'GROUP_ADMIN', 'MAINTAINER'].includes(role || '') && (
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="bg-white text-navy-600 px-5 py-2.5 rounded-lg font-bold font-display shadow hover:bg-navy-50 transition flex items-center gap-2"
-                    >
-                        <Plus size={18} /> Add FAQ
-                    </button>
+                    <div className="flex flex-col items-end gap-2">
+                        <button
+                            onClick={() => !isFull && setIsModalOpen(true)}
+                            disabled={isFull}
+                            className={`backdrop-blur-md border border-white/20 px-6 py-3 rounded-2xl font-black font-display shadow-2xl transition-all flex items-center gap-2 relative z-10 active:scale-95 ${isFull 
+                                ? 'bg-white/5 text-white/40 cursor-not-allowed border-white/10' 
+                                : 'bg-white/20 text-white hover:bg-white/30'}`}
+                        >
+                            <Plus size={20} /> Add FAQ
+                        </button>
+                        {isFull && (
+                            <span className="text-[10px] font-black text-amber-300 uppercase tracking-widest animate-pulse">
+                                Kuota FAQ Penuh (Maks 10)
+                            </span>
+                        )}
+                    </div>
                 )}
             </div>
 
-            <div className="relative mb-8">
-                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-text-300" size={20} />
-                <input
-                    type="text"
-                    placeholder="Search for questions or keywords..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-12 pr-4 py-4 w-full border-2 border-surface-200 rounded-xl shadow-sm text-lg focus:ring-navy-600 focus:border-navy-600 outline-none"
-                />
-            </div>
-
             {loading ? (
-                <div className="text-center py-12 text-text-500 animate-pulse">Loading FAQs...</div>
-            ) : Object.keys(faqsByDivision).length === 0 ? (
-                <div className="text-center border-2 border-dashed border-surface-200 rounded-xl py-12 text-text-500">
-                    <HelpCircle size={48} className="mx-auto text-text-300 mb-4" />
-                    <p>No FAQs available matching your search.</p>
+                <div className="text-center py-12 flex flex-col items-center gap-4">
+                    <div className="w-10 h-10 border-4 border-navy-500/20 border-t-navy-500 rounded-full animate-spin"></div>
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Loading FAQs...</p>
+                </div>
+            ) : filteredFaqs.length === 0 ? (
+                <div className="text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[32px] py-16 text-slate-400">
+                    <HelpCircle size={48} className="mx-auto text-slate-200 dark:text-slate-800 mb-4" />
+                    <p className="font-bold">Tidak ada FAQ yang ditemukan.</p>
                 </div>
             ) : (
-                <div className="space-y-8">
-                    {Object.keys(faqsByDivision).sort().map((divName) => (
-                        <div key={divName} className="space-y-4">
-                            <h2 className="text-xl font-bold font-display text-navy-900 border-b pb-2">{divName}</h2>
-                            <div className="space-y-3">
-                                {faqsByDivision[divName].map((faq: any) => (
-                                    <div key={faq.id} className="bg-white border text-left rounded-lg shadow-sm overflow-hidden transition-all duration-200">
-                                        <div className="flex">
-                                            <button
-                                                onClick={() => setOpenIndex(openIndex === faq.id ? null : faq.id)}
-                                                className="flex-1 px-6 py-4 flex justify-between items-center hover:bg-surface-50 text-left"
-                                            >
-                                                <span className="font-semibold text-navy-900 pr-4">{faq.question}</span>
-                                                {openIndex === faq.id ? <ChevronUp size={20} className="text-text-300 shrink-0" /> : <ChevronDown size={20} className="text-text-300 shrink-0" />}
-                                            </button>
-
-                                            {['SUPER_ADMIN', 'GROUP_ADMIN'].includes(role || '') && (
-                                                <div className="border-l flex items-center shrink-0">
-                                                    <button
-                                                        onClick={() => handleDelete(faq.id)}
-                                                        className="px-4 py-4 text-red-400 hover:text-danger hover:bg-danger-bg transition"
-                                                        title="Delete FAQ"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                </div>
-                                            )}
+                <div className="space-y-4">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-800"></div>
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Global Knowledge Base</span>
+                        <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-800"></div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {filteredFaqs.map((faq) => (
+                            <div key={faq.id} className="group bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-700/50 overflow-hidden transition-all duration-300 hover:shadow-lg hover:shadow-navy-900/5 dark:hover:shadow-indigo-500/5">
+                                <div className="flex">
+                                    <button
+                                        onClick={() => setOpenIndex(openIndex === faq.id ? null : faq.id)}
+                                        className="flex-1 px-7 py-5 flex justify-between items-center text-left"
+                                    >
+                                        <span className="font-extrabold text-slate-900 dark:text-slate-100 pr-4 leading-tight group-hover:text-navy-600 dark:group-hover:text-indigo-400 transition-colors">
+                                            {faq.question}
+                                        </span>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${openIndex === faq.id ? 'bg-navy-600 text-white rotate-180' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
+                                            <ChevronDown size={18} />
                                         </div>
+                                    </button>
 
-                                        {openIndex === faq.id && (
-                                            <div className="px-6 py-4 border-t bg-surface-50">
-                                                <p className="text-text-700 whitespace-pre-wrap">{faq.answer}</p>
-                                            </div>
-                                        )}
+                                    {['SUPER_ADMIN', 'GROUP_ADMIN'].includes(role || '') && (
+                                        <div className="pr-4 py-4 flex items-center shrink-0">
+                                            <button
+                                                onClick={() => handleDelete(faq.id)}
+                                                className="w-10 h-10 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                                                title="Hapus FAQ"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {openIndex === faq.id && (
+                                    <div className="px-7 pb-6 pt-0 animate-in slide-in-from-top-2 duration-300">
+                                        <div className="p-5 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800/50">
+                                            <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed whitespace-pre-wrap font-medium">
+                                                {faq.answer}
+                                            </p>
+                                        </div>
                                     </div>
-                                ))}
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
             )}
 
             {/* Create FAQ Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-                        <div className="p-5 border-b bg-surface-50">
-                            <h2 className="text-xl font-bold font-display flex items-center gap-2 text-navy-900">
-                                <Plus size={20} className="text-navy-600" /> Add New FAQ
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-900 rounded-[32px] shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-800 animate-in zoom-in-95 duration-300">
+                        <div className="p-7 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center">
+                            <h2 className="text-xl font-black font-display flex items-center gap-3 text-slate-900 dark:text-white">
+                                <div className="w-10 h-10 rounded-xl bg-navy-50 dark:bg-indigo-900/30 flex items-center justify-center text-navy-600 dark:text-indigo-400">
+                                    <Plus size={20} />
+                                </div>
+                                Tambah FAQ Baru
                             </h2>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                                {faqs.length} / 10
+                            </span>
                         </div>
-                        <form onSubmit={handleCreate} className="p-6 space-y-4">
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium text-text-700">Category / Division</label>
-                                <select
-                                    required
-                                    value={formData.divisionId}
-                                    onChange={e => setFormData({ ...formData, divisionId: e.target.value })}
-                                    className="w-full border rounded-md p-2.5 focus:ring-navy-600 bg-white"
-                                >
-                                    {divisions.map(d => (
-                                        <option key={d.id} value={d.id}>{d.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium text-text-700">Question</label>
+                        <form onSubmit={handleCreate} className="p-8 space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Pertanyaan</label>
                                 <input
                                     required
+                                    autoFocus
                                     type="text"
                                     value={formData.question}
                                     onChange={e => setFormData({ ...formData, question: e.target.value })}
-                                    className="w-full border rounded-md p-2.5 focus:ring-navy-600 focus:border-navy-600"
-                                    placeholder="E.g. How do I request computer repair?"
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 focus:ring-2 focus:ring-navy-500 dark:text-white font-bold"
+                                    placeholder="Apa yang ingin ditanyakan?"
                                 />
                             </div>
 
-                            <div className="space-y-1">
-                                <label className="text-sm font-medium text-text-700">Answer</label>
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-500 uppercase tracking-[0.15em] ml-1">Jawaban</label>
                                 <textarea
                                     required
                                     value={formData.answer}
                                     onChange={e => setFormData({ ...formData, answer: e.target.value })}
-                                    className="w-full border rounded-md p-2.5 min-h-[120px] focus:ring-navy-600 focus:border-navy-600"
-                                    placeholder="E.g. Please open a ticket via the IT Portal..."
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-2xl p-4 min-h-[140px] focus:ring-2 focus:ring-navy-500 dark:text-white font-medium text-sm leading-relaxed"
+                                    placeholder="Berikan jawaban yang jelas dan ringkas..."
                                 />
                             </div>
 
-                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-text-500 hover:bg-surface-100 rounded font-medium">Cancel</button>
-                                <button type="submit" disabled={saving} className="btn btn-primary">
-                                    {saving ? 'Saving...' : 'Save FAQ'}
+                            <div className="flex justify-end gap-3 mt-4 pt-6 border-t border-slate-100 dark:border-slate-800">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-3 text-slate-500 font-bold hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl transition-all">Batal</button>
+                                <button 
+                                    type="submit" 
+                                    disabled={saving || isFull} 
+                                    className="px-8 py-3 bg-navy-600 hover:bg-navy-700 text-white font-black text-xs uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-navy-600/20 active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                    {saving ? 'Menyimpan...' : 'Simpan FAQ'}
                                 </button>
                             </div>
                         </form>
