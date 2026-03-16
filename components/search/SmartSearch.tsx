@@ -41,16 +41,16 @@ export default function SmartSearch() {
     return (
         <div className="space-y-6">
             {/* Hero Search */}
-            <div className="bg-gradient-to-br from-navy-900 via-navy-800 to-navy-700 rounded-2xl p-8 md:p-12 text-center text-white relative overflow-hidden">
-                <div className="absolute inset-0 opacity-10" style={{
-                    backgroundImage: 'radial-gradient(circle at 25% 50%, rgba(255,255,255,0.3) 0%, transparent 50%), radial-gradient(circle at 75% 50%, rgba(245,158,11,0.2) 0%, transparent 50%)'
+            <div className="bg-gradient-to-br from-navy-900 via-navy-800 to-navy-700 dark:from-navy-sidebar dark:via-navy-900/10 dark:to-navy-sidebar rounded-2xl p-8 md:p-12 text-center text-white relative overflow-hidden border dark:border-surface-100">
+                <div className="absolute inset-0 opacity-10 dark:opacity-20" style={{
+                    backgroundImage: 'radial-gradient(circle at 25% 50%, rgba(255,255,255,0.2) 0%, transparent 50%), radial-gradient(circle at 75% 50%, rgba(245,158,11,0.1) 0%, transparent 50%)'
                 }} />
                 <div className="relative z-10">
                     <div className="flex items-center justify-center gap-2 mb-4">
                         <Bot size={28} className="text-amber-400" />
-                        <h2 className="text-3xl font-bold font-display">Smart Search</h2>
+                        <h2 className="text-3xl font-bold font-display text-white">Smart Search</h2>
                     </div>
-                    <p className="text-navy-200 max-w-lg mx-auto mb-8">
+                    <p className="text-navy-200 dark:text-navy-400 max-w-lg mx-auto mb-8">
                         Search across all processed documents and knowledge base in your organization.
                     </p>
 
@@ -61,7 +61,7 @@ export default function SmartSearch() {
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="Ask anything..."
-                            className="w-full pl-14 pr-32 py-4 bg-white text-navy-900 rounded-xl shadow-lg text-base focus:ring-4 focus:ring-amber-400/30 focus:outline-none border-0 placeholder:text-text-300"
+                            className="w-full pl-14 pr-32 py-4 bg-white dark:bg-surface-50 text-navy-900 dark:text-navy-900 rounded-xl shadow-lg text-base focus:ring-4 focus:ring-amber-400/30 dark:focus:ring-amber-400/10 focus:outline-none border-0 dark:border dark:border-surface-100 placeholder:text-text-300"
                         />
                         <button
                             type="submit"
@@ -117,7 +117,7 @@ export default function SmartSearch() {
                         </div>
                     ) : (
                         results.map((doc) => (
-                            <div key={doc.id} className="card p-6 hover:border-navy-400 transition-colors">
+                            <div key={doc.id} className="card p-6 border-surface-200 dark:border-surface-100 dark:bg-surface-0/50 hover:border-navy-400 dark:hover:border-navy-500 transition-colors">
                                 <div className="flex items-start justify-between mb-3">
                                     <div className="flex items-start gap-3">
                                         <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${doc.type === 'content' ? 'bg-indigo-100 text-indigo-600' : 'bg-navy-100 text-navy-600'
@@ -162,7 +162,7 @@ export default function SmartSearch() {
                                             <Hash size={12} /> Matching Sections
                                         </p>
                                         {doc.chunks.map((chunk: any) => (
-                                            <div key={chunk.id} className="bg-surface-50 border border-surface-200 rounded-md p-3">
+                                            <div key={chunk.id} className="bg-surface-50 dark:bg-surface-50 border border-surface-200 dark:border-surface-100 rounded-md p-3">
                                                 <p
                                                     className="text-sm text-text-700 leading-relaxed line-clamp-3"
                                                     dangerouslySetInnerHTML={{ __html: highlightMatch(chunk.content, query) }}

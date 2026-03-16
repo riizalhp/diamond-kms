@@ -4,10 +4,10 @@ import { useState, useEffect } from 'react'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import {
     FileText, Tags, Users, Network, Activity,
-    TrendingUp, BookOpen, BarChart3
+    TrendingUp, BookOpen, BarChart3, CheckCircle
 } from 'lucide-react'
 import Link from 'next/link'
-import SmartSearch from '@/components/search/SmartSearch'
+import { getMandatoryReadStatsAction } from '@/lib/actions/read-tracker.actions'
 
 interface DashboardStats {
     totalDocuments: number
@@ -25,17 +25,19 @@ interface DashboardStats {
 export default function DashboardPage() {
     const { user, role, organization, isLoading } = useCurrentUser()
     const [stats, setStats] = useState<DashboardStats | null>(null)
+    const [trackerStats, setTrackerStats] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         if (organization?.id) {
-            fetch('/api/dashboard/stats')
-                .then(res => res.json())
-                .then(data => {
-                    if (!data.error) setStats(data)
-                    setLoading(false)
-                })
-                .catch(() => setLoading(false))
+            Promise.all([
+                fetch('/api/dashboard/stats').then(res => res.json()),
+                getMandatoryReadStatsAction(organization.id)
+            ]).then(([statsData, trackerRes]) => {
+                if (!statsData.error) setStats(statsData)
+                if (trackerRes.success) setTrackerStats(trackerRes.data || [])
+                setLoading(false)
+            }).catch(() => setLoading(false))
         }
     }, [organization?.id])
 
@@ -87,7 +89,7 @@ export default function DashboardPage() {
 
             {/* Reading Tracker — for HRD, Kadiv, Supervisor */}
             {(isHRD || isKadivOrSupervisor) && stats && (
-                <div className="card p-6 bg-gradient-to-r from-navy-900 to-navy-700 text-white overflow-hidden relative">
+                <div className="card p-6 banner-primary text-white overflow-hidden relative border-none">
                     <div className="absolute top-0 right-0 p-6 opacity-10 pointer-events-none">
                         <BookOpen size={120} />
                     </div>
@@ -122,12 +124,12 @@ export default function DashboardPage() {
                 {/* Total Dokumen — all roles */}
                 <Link href="/dashboard/documents" className="card p-6 hover:border-navy-300 transition-colors group">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-navy-100 text-navy-600 rounded-xl flex items-center justify-center group-hover:bg-navy-600 group-hover:text-white transition">
+                        <div className="w-12 h-12 bg-navy-light text-navy-600 rounded-xl flex items-center justify-center group-hover:bg-navy-600 group-hover:text-white transition">
                             <FileText size={24} />
                         </div>
                         <div>
-                            <p className="text-text-400 text-xs font-semibold uppercase tracking-wider">Dokumen</p>
-                            <p className="text-3xl font-black font-display text-navy-900 mt-0.5">
+                            <p className="text-text-500 text-xs font-semibold uppercase tracking-wider">Dokumen</p>
+                            <p className="text-3xl font-black font-display text-text-900 mt-0.5">
                                 {stats?.totalDocuments ?? 0}
                             </p>
                         </div>
@@ -137,12 +139,12 @@ export default function DashboardPage() {
                 {/* Total Konten — all roles */}
                 <Link href="/dashboard/contents" className="card p-6 hover:border-navy-300 transition-colors group">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition">
+                        <div className="w-12 h-12 bg-amber-light text-amber-600 rounded-xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition">
                             <Tags size={24} />
                         </div>
                         <div>
-                            <p className="text-text-400 text-xs font-semibold uppercase tracking-wider">Konten</p>
-                            <p className="text-3xl font-black font-display text-navy-900 mt-0.5">
+                            <p className="text-text-500 text-xs font-semibold uppercase tracking-wider">Konten</p>
+                            <p className="text-3xl font-black font-display text-text-900 mt-0.5">
                                 {stats?.totalContents ?? 0}
                             </p>
                         </div>
@@ -153,12 +155,12 @@ export default function DashboardPage() {
                 {isHRD && (
                     <Link href="/dashboard/hrd/divisions" className="card p-6 hover:border-navy-300 transition-colors group">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-purple-100 text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition">
+                            <div className="w-12 h-12 bg-purple-light text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition">
                                 <Network size={24} />
                             </div>
                             <div>
-                                <p className="text-text-400 text-xs font-semibold uppercase tracking-wider">Divisi</p>
-                                <p className="text-3xl font-black font-display text-navy-900 mt-0.5">
+                                <p className="text-text-500 text-xs font-semibold uppercase tracking-wider">Divisi</p>
+                                <p className="text-3xl font-black font-display text-text-900 mt-0.5">
                                     {stats?.totalDivisions ?? 0}
                                 </p>
                             </div>
@@ -170,12 +172,12 @@ export default function DashboardPage() {
                 {(isHRD || isKadivOrSupervisor) && (
                     <Link href={isHRD ? "/dashboard/hrd/users" : "#"} className="card p-6 hover:border-navy-300 transition-colors group">
                         <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 bg-green-100 text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition">
+                            <div className="w-12 h-12 bg-green-light text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition">
                                 <Users size={24} />
                             </div>
                             <div>
-                                <p className="text-text-400 text-xs font-semibold uppercase tracking-wider">Anggota</p>
-                                <p className="text-3xl font-black font-display text-navy-900 mt-0.5">
+                                <p className="text-text-500 text-xs font-semibold uppercase tracking-wider">Anggota</p>
+                                <p className="text-3xl font-black font-display text-text-900 mt-0.5">
                                     {stats?.totalMembers ?? 0}
                                 </p>
                             </div>
@@ -184,10 +186,36 @@ export default function DashboardPage() {
                 )}
             </div>
 
-            {/* Smart Search */}
-            <div className="mb-4">
-                <SmartSearch />
-            </div>
+            {/* Reading Tracker Section */}
+            {(isHRD || isKadivOrSupervisor) && trackerStats.length > 0 && (
+                <div className="space-y-4">
+                    <h2 className="text-xl font-bold font-display text-navy-900 flex items-center gap-2">
+                        <CheckCircle size={20} className="text-navy-600" /> Mandatory Read Tracking
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {trackerStats.slice(0, 3).map((item) => (
+                            <div key={item.id} className="card p-5">
+                                <h3 className="font-bold font-display text-text-900 text-sm mb-3 line-clamp-1">{item.title}</h3>
+                                <div className="flex justify-between items-end mb-2">
+                                    <span className="text-xs text-text-500">{item.readCount}/{item.totalTarget} Pembaca</span>
+                                    <span className="text-lg font-black text-navy-600">{item.percent}%</span>
+                                </div>
+                                <div className="w-full bg-surface-100 rounded-full h-1.5 overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-1000 ${item.percent >= 90 ? 'bg-green-500' : item.percent >= 50 ? 'bg-navy-600' : 'bg-orange-500'}`}
+                                        style={{ width: `${item.percent}%` }}
+                                    />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {trackerStats.length > 3 && (
+                        <Link href="/dashboard/trackers" className="text-sm font-medium text-navy-600 hover:text-navy-700 block text-right mt-2">
+                            Lihat semua →
+                        </Link>
+                    )}
+                </div>
+            )}
 
             {/* Quick Actions */}
             <div className="card p-6">
@@ -196,21 +224,21 @@ export default function DashboardPage() {
                     Akses Cepat
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <Link href="/dashboard/documents" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
+                    <Link href="/dashboard/documents" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-light hover:border-navy-300 transition">
                         <FileText size={20} className="mx-auto text-navy-600 mb-2" />
-                        <span className="text-sm font-medium text-navy-900">Dokumen</span>
+                        <span className="text-sm font-medium text-text-900">Dokumen</span>
                     </Link>
-                    <Link href="/dashboard/contents" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
+                    <Link href="/dashboard/contents" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-light hover:border-navy-300 transition">
                         <Tags size={20} className="mx-auto text-amber-600 mb-2" />
-                        <span className="text-sm font-medium text-navy-900">Knowledge Base</span>
+                        <span className="text-sm font-medium text-text-900">Knowledge Base</span>
                     </Link>
-                    <Link href="/dashboard/ai-assistant" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
+                    <Link href="/dashboard/ai-assistant" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-light hover:border-navy-300 transition">
                         <TrendingUp size={20} className="mx-auto text-green-600 mb-2" />
-                        <span className="text-sm font-medium text-navy-900">AI Assistant</span>
+                        <span className="text-sm font-medium text-text-900">AI Assistant</span>
                     </Link>
-                    <Link href="/dashboard/leaderboard" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
+                    <Link href="/dashboard/leaderboard" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-light hover:border-navy-300 transition">
                         <Activity size={20} className="mx-auto text-purple-600 mb-2" />
-                        <span className="text-sm font-medium text-navy-900">Pemahaman Pegawai</span>
+                        <span className="text-sm font-medium text-text-900">Pemahaman Pegawai</span>
                     </Link>
                 </div>
             </div>

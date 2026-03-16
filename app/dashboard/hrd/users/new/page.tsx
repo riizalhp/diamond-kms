@@ -74,8 +74,8 @@ export default function CreateUserPage() {
                 <div className="card p-6 md:p-8">
                     {status.msg && (
                         <div className={`p-4 rounded-lg mb-6 text-sm font-medium border ${status.type === 'error' ? 'bg-danger-bg text-danger border-red-200'
-                                : status.type === 'success' ? 'bg-success-bg text-success border-green-200'
-                                    : 'bg-info-bg text-info border-blue-200'
+                            : status.type === 'success' ? 'bg-success-bg text-success border-green-200'
+                                : 'bg-info-bg text-info border-blue-200'
                             }`}>
                             <div className="flex items-center gap-2">
                                 {status.type === 'loading' && <Loader2 size={16} className="animate-spin" />}
@@ -162,14 +162,8 @@ export default function CreateUserPage() {
                                 >
                                     <option value="STAFF">Staff</option>
                                     <option value="SUPERVISOR">Supervisor</option>
-                                    {/* Kadiv (GROUP_ADMIN) hanya bisa buat Staff & Supervisor */}
-                                    {currentUserRole !== 'GROUP_ADMIN' && (
-                                        <option value="GROUP_ADMIN">Group Admin (KaDiv)</option>
-                                    )}
-                                    {/* Hanya MAINTAINER yang bisa buat SUPER_ADMIN */}
-                                    {currentUserRole === 'MAINTAINER' && (
-                                        <option value="SUPER_ADMIN">Super Admin (HRD)</option>
-                                    )}
+                                    <option value="GROUP_ADMIN">Group Admin (KaDiv)</option>
+                                    <option value="SUPER_ADMIN">Super Admin</option>
                                 </select>
                             </div>
 

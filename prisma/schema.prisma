@@ -319,6 +319,7 @@ model Quiz {
   time_limit_minutes Int?
   is_published       Boolean        @default(false)
   content_id         String?
+  notes              String?        @db.Text
   created_at         DateTime       @default(now())
 
   organization       Organization   @relation(fields: [organization_id], references: [id], onDelete: Cascade)
@@ -394,7 +395,7 @@ model UserPoints {
 model FAQ {
   id               String       @id @default(uuid())
   organization_id  String
-  division_id      String
+  division_id      String?
   created_by       String
   question         String       @db.Text
   answer           String       @db.Text
@@ -402,7 +403,7 @@ model FAQ {
   created_at       DateTime     @default(now())
 
   organization     Organization @relation(fields: [organization_id], references: [id], onDelete: Cascade)
-  division         Division     @relation(fields: [division_id], references: [id], onDelete: Cascade)
+  division         Division?    @relation(fields: [division_id], references: [id], onDelete: Cascade)
 
   @@index([organization_id])
   @@map("faqs")

@@ -74,7 +74,7 @@ export function NotificationBell({ userId }: { userId: string }) {
         <div className="relative" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="text-slate-500 hover:text-slate-800 relative p-2 rounded-full hover:bg-slate-100 transition"
+                className="text-text-500 dark:text-text-300 hover:text-navy-600 dark:hover:text-navy-400 relative p-2 rounded-full hover:bg-surface-100 dark:hover:bg-surface-0 transition"
             >
                 <Bell size={20} />
                 {unreadCount > 0 && (
@@ -85,9 +85,9 @@ export function NotificationBell({ userId }: { userId: string }) {
             </button>
 
             {isOpen && (
-                <div className="absolute top-full right-0 mt-2 w-80 md:w-96 bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden z-50">
-                    <div className="p-4 border-b bg-slate-50 flex justify-between items-center">
-                        <h3 className="font-bold text-slate-800">Notifications</h3>
+                <div className="absolute top-full right-0 mt-2 w-80 md:w-96 bg-white dark:bg-surface-0 rounded-xl shadow-xl border border-surface-200 dark:border-surface-100 overflow-hidden z-50">
+                    <div className="p-4 border-b dark:border-surface-100 bg-surface-50 dark:bg-surface-50 flex justify-between items-center">
+                        <h3 className="font-bold text-text-900">Notifications</h3>
                         {unreadCount > 0 && (
                             <button
                                 onClick={handleMarkAllAsRead}
@@ -104,15 +104,15 @@ export function NotificationBell({ userId }: { userId: string }) {
                                 You have no notifications.
                             </div>
                         ) : (
-                            <ul className="divide-y divide-slate-100">
+                            <ul className="divide-y divide-surface-100 dark:divide-surface-100">
                                 {notifications.map(notif => (
-                                    <li key={notif.id} className={`hover:bg-slate-50 transition ${!notif.is_read ? 'bg-blue-50/30' : ''}`}>
+                                    <li key={notif.id} className={`hover:bg-surface-50 dark:hover:bg-surface-100 transition ${!notif.is_read ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}>
                                         <Link
                                             href={getLink(notif)}
                                             onClick={() => { if (!notif.is_read) handleMarkAsRead(notif.id, { preventDefault: () => { } } as any) }}
                                             className="p-4 flex gap-3 items-start"
                                         >
-                                            <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${!notif.is_read ? 'bg-white shadow-sm' : 'bg-slate-100'}`}>
+                                            <div className={`mt-1 flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${!notif.is_read ? 'bg-white dark:bg-surface-0 shadow-sm' : 'bg-surface-100 dark:bg-surface-100'}`}>
                                                 {getIcon(notif.type)}
                                             </div>
                                             <div className="flex-1 min-w-0">

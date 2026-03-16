@@ -22,7 +22,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </div>
 
             <div className="mt-8 text-center text-xs text-text-300">
-                &copy; {new Date().getFullYear()} PT. Teknologi Maju. All rights reserved.
+                WELDN_AI. All rights reserved.
             </div>
         </div>
     )

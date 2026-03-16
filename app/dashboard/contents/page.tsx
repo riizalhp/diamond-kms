@@ -47,7 +47,7 @@ export default function ContentsPage() {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-bold font-display text-navy-900">Knowledge Base</h1>
+                <h1 className="text-2xl font-bold font-display text-text-900">Knowledge Base</h1>
                 {['SUPER_ADMIN', 'GROUP_ADMIN', 'SUPERVISOR', 'MAINTAINER'].includes(role || '') && (
                     <Link
                         href="/dashboard/contents/create"
@@ -67,7 +67,7 @@ export default function ContentsPage() {
                             placeholder="Search articles..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 pr-4 py-2 border rounded-md w-full focus:ring-navy-600 focus:border-navy-600"
+                            className="pl-10 pr-4 py-2 border border-surface-200 rounded-md w-full focus:ring-navy-600 focus:border-navy-600 bg-surface-0 text-text-900"
                         />
                     </div>
                 </div>
@@ -89,8 +89,8 @@ export default function ContentsPage() {
                             <tr><td colSpan={5} className="p-8 text-center text-text-500">No content found.</td></tr>
                         ) : (
                             filteredContents.map((c) => (
-                                <tr key={c.id} className="border-b last:border-0 hover:bg-surface-50">
-                                    <td className="p-4 font-medium text-navy-900">
+                                <tr key={c.id} className="border-b border-surface-200 last:border-0 hover:bg-surface-50">
+                                    <td className="p-4 font-medium text-text-900">
                                         <Link href={`/dashboard/contents/${c.id}`} className="hover:text-navy-600 hover:underline">
                                             {c.title}
                                         </Link>
@@ -102,9 +102,9 @@ export default function ContentsPage() {
                                         {c.author_name}
                                     </td>
                                     <td className="p-4">
-                                        <span className={`inline-block px-2 py-1 text-xs rounded border font-medium ${c.status === 'PUBLISHED' ? 'bg-green-100 text-green-700 border-green-200' :
-                                            c.status === 'PENDING_APPROVAL' ? 'bg-orange-100 text-orange-700 border-orange-200' :
-                                                'bg-surface-100 text-text-700 border-surface-200'
+                                        <span className={`inline-block px-2 py-1 text-xs rounded border font-medium ${c.status === 'PUBLISHED' ? 'bg-green-light text-green-600 border-green-600/20' :
+                                            c.status === 'PENDING_APPROVAL' ? 'bg-amber-light text-amber-600 border-amber-600/20' :
+                                                'bg-surface-100 text-text-500 border-surface-200'
                                             }`}>
                                             {c.status}
                                         </span>

@@ -25,15 +25,24 @@ export const metadata: Metadata = {
     description: "Knowledge Management System by Diamond",
 };
 
+import { ThemeProvider } from "@/components/shared/ThemeProvider";
+
 export default function RootLayout({
     children,
 }: Readonly<{
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en">
+        <html lang="en" suppressHydrationWarning>
             <body className={`${sora.variable} ${dmSans.variable} ${jetbrainsMono.variable} font-sans bg-surface-50 text-navy-900`}>
-                {children}
+                <ThemeProvider
+                    attribute="class"
+                    defaultTheme="light"
+                    enableSystem
+                    disableTransitionOnChange
+                >
+                    {children}
+                </ThemeProvider>
             </body>
         </html>
     );

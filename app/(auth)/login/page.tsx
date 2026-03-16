@@ -103,25 +103,6 @@ export default function LoginPage() {
                 </button>
             </form>
 
-            <div className="mt-8">
-                <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-surface-200" />
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                        <span className="px-3 bg-surface-0 text-text-300 font-medium">Or</span>
-                    </div>
-                </div>
-
-                <div className="mt-8 text-center text-[13px]">
-                    <p className="text-text-500">
-                        For new organizations:{' '}
-                        <Link href="/register" className="font-semibold text-navy-600 hover:text-navy-700 transition-colors">
-                            Register here
-                        </Link>
-                    </p>
-                </div>
-            </div>
         </div>
     )
 }
