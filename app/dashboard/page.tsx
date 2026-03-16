@@ -228,11 +228,7 @@ export default function DashboardPage() {
                         <FileText size={20} className="mx-auto text-navy-600 mb-2" />
                         <span className="text-sm font-medium text-text-900">Dokumen</span>
                     </Link>
-<<<<<<< HEAD
-                    <Link href="/dashboard/knowledge-base" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
-=======
-                    <Link href="/dashboard/contents" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-light hover:border-navy-300 transition">
->>>>>>> origin/acep
+                    <Link href="/dashboard/knowledge-base" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-light hover:border-navy-300 transition">
                         <Tags size={20} className="mx-auto text-amber-600 mb-2" />
                         <span className="text-sm font-medium text-text-900">Knowledge Base</span>
                     </Link>
