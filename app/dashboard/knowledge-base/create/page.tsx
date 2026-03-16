@@ -90,7 +90,7 @@ export default function CreateContentPage() {
         if (res.success) {
             setStatus({ type: 'success', msg: 'Article created successfully (Draft)' })
             setTimeout(() => {
-                router.push('/dashboard/contents')
+                router.push('/dashboard/knowledge-base')
             }, 1000)
         } else {
             setStatus({ type: 'error', msg: res.error || 'Failed to create article' })
@@ -105,7 +105,7 @@ export default function CreateContentPage() {
     return (
         <div className="max-w-5xl mx-auto space-y-6">
             <div className="flex items-center gap-4">
-                <Link href="/dashboard/contents" className="p-2 text-text-500 hover:text-navy-900 hover:bg-surface-100 rounded-full transition">
+                <Link href="/dashboard/content" className="p-2 text-text-500 hover:text-navy-900 hover:bg-surface-100 rounded-full transition">
                     <ArrowLeft size={20} />
                 </Link>
                 <div className="flex items-center gap-3">
@@ -227,7 +227,7 @@ export default function CreateContentPage() {
 
                     <div className="pt-6 flex justify-end gap-3 border-t">
                         <Link
-                            href="/dashboard/contents"
+                            href="/dashboard/content"
                             className="px-6 py-2.5 border border-surface-200 text-text-700 rounded-md hover:bg-surface-50 font-medium transition"
                         >
                             Cancel

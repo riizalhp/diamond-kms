@@ -135,7 +135,7 @@ export default function DashboardPage() {
                 </Link>
 
                 {/* Total Konten — all roles */}
-                <Link href="/dashboard/contents" className="card p-6 hover:border-navy-300 transition-colors group">
+                <Link href="/dashboard/knowledge-base" className="card p-6 hover:border-navy-300 transition-colors group">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition">
                             <Tags size={24} />
@@ -200,7 +200,7 @@ export default function DashboardPage() {
                         <FileText size={20} className="mx-auto text-navy-600 mb-2" />
                         <span className="text-sm font-medium text-navy-900">Dokumen</span>
                     </Link>
-                    <Link href="/dashboard/contents" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
+                    <Link href="/dashboard/knowledge-base" className="p-4 bg-surface-50 border border-surface-200 rounded-xl text-center hover:bg-navy-50 hover:border-navy-300 transition">
                         <Tags size={20} className="mx-auto text-amber-600 mb-2" />
                         <span className="text-sm font-medium text-navy-900">Knowledge Base</span>
                     </Link>

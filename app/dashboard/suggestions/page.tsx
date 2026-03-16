@@ -87,7 +87,7 @@ export default function SuggestionsPage() {
                                             <div className="flex items-center gap-2 mb-1 text-sm text-text-500">
                                                 <span className="font-bold font-display text-text-700">{s.suggestor_name}</span> suggested a change on:
                                             </div>
-                                            <Link href={`/dashboard/contents/${s.content_id}`} target="_blank" className="text-lg font-bold font-display text-navy-600 hover:underline flex items-center gap-2 mb-3">
+                                            <Link href={`/dashboard/knowledge-base/${s.content_id}`} target="_blank" className="text-lg font-bold font-display text-navy-600 hover:underline flex items-center gap-2 mb-3">
                                                 {s.content?.title || 'Unknown Article'} <Eye size={16} />
                                             </Link>
 

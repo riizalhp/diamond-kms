@@ -37,6 +37,13 @@ interface ChatMessage {
     content: string
 }
 
+interface ChatSession {
+    id: string
+    title: string
+    messages: ChatMessage[]
+    updatedAt: string
+}
+
 /* ═══════════════════════════════════════════
    MOCK DATA  (frontend-only, replaced later)
    ═══════════════════════════════════════════ */
@@ -104,9 +111,9 @@ function KBListView({ knowledgeBases, onSelect, onCreate }: {
                 <div>
                     <h1 className="text-2xl font-bold font-display text-navy-900 flex items-center gap-2">
                         <Tags size={22} className="text-navy-600" />
-                        Knowledge Base
+                        Knowledge Base Management
                     </h1>
-                    <p className="text-text-400 text-sm mt-1">Buat & kelola knowledge base dari dokumen dan konten</p>
+                    <p className="text-text-400 text-sm mt-1">Buat, edit, dan kelola semua knowledge base organisasi</p>
                 </div>
                 <button onClick={onCreate}
                     className="btn btn-primary flex items-center gap-2">
@@ -377,17 +384,30 @@ function CreateKBView({ allDocs, onBack, onCreateDone }: {
 /* ═══════════════════════════════════════════
    VIEW: KB CHAT
    ═══════════════════════════════════════════ */
-function KBChatView({ kb, onBack, onAddDoc, onRemoveDoc }: {
+function KBChatView({ kb, onBack, onAddDoc, onRemoveDoc, chatSessions, onSaveSession, onLoadSession, onNewSession }: {
     kb: KnowledgeBase
     onBack: () => void
     onAddDoc: () => void
     onRemoveDoc: (id: string) => void
+    chatSessions: ChatSession[]
+    onSaveSession: (session: ChatSession) => void
+    onLoadSession: (sessionId: string) => void
+    onNewSession: () => void
 }) {
     const [messages, setMessages] = useState<ChatMessage[]>([])
     const [input, setInput] = useState('')
     const [isTyping, setIsTyping] = useState(false)
     const [showSidebar, setShowSidebar] = useState(true)
+    const [sidebarTab, setSidebarTab] = useState<'docs' | 'history'>('docs')
+    const [showNewSessionModal, setShowNewSessionModal] = useState(false)
     const endRef = useRef<HTMLDivElement>(null)
+
+    const handleConfirmNewSession = () => {
+        setMessages([])
+        setInput('')
+        onNewSession()
+        setShowNewSessionModal(false)
+    }
 
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -428,10 +448,21 @@ function KBChatView({ kb, onBack, onAddDoc, onRemoveDoc }: {
                             <p className="text-[11px] text-text-400">{kb.documents.length} sumber · Powered by AI</p>
                         </div>
                     </div>
-                    <button onClick={() => setShowSidebar(!showSidebar)}
-                        className={`p-2 rounded-lg transition text-sm font-medium flex items-center gap-1.5 ${showSidebar ? 'bg-navy-100 text-navy-600' : 'hover:bg-surface-100 text-text-400'}`}>
-                        <FileText size={14} /> Sumber
-                    </button>
+                    <div className="flex items-center gap-1 bg-surface-100 p-1 rounded-xl">
+                        <button onClick={() => { setShowSidebar(true); setSidebarTab('docs') }}
+                            className={`px-3 py-1.5 rounded-lg transition text-sm font-medium flex items-center gap-1.5 ${showSidebar && sidebarTab === 'docs' ? 'bg-white shadow-sm text-navy-600' : 'text-text-400 hover:text-text-600'}`}>
+                            <FileText size={14} /> Sumber
+                        </button>
+                        <button onClick={() => setShowNewSessionModal(true)}
+                            className="p-1.5 rounded-lg transition text-text-400 hover:text-navy-600 hover:bg-white"
+                            title="Sesi Baru">
+                            <Plus size={16} />
+                        </button>
+                        <button onClick={() => { setShowSidebar(true); setSidebarTab('history') }}
+                            className={`px-3 py-1.5 rounded-lg transition text-sm font-medium flex items-center gap-1.5 ${showSidebar && sidebarTab === 'history' ? 'bg-white shadow-sm text-navy-600' : 'text-text-400 hover:text-text-600'}`}>
+                            <MessageSquare size={14} /> Riwayat Chat
+                        </button>
+                    </div>
                 </div>
 
                 {/* Messages */}
@@ -512,45 +543,109 @@ function KBChatView({ kb, onBack, onAddDoc, onRemoveDoc }: {
                 </div>
             </div>
 
-            {/* Documents Sidebar */}
+            {/* Right Sidebar */}
             {showSidebar && (
                 <div className="w-[280px] bg-surface-50 border-l border-surface-200 flex flex-col shrink-0">
-                    <div className="p-4 border-b border-surface-200">
-                        <h3 className="font-bold text-navy-900 text-sm flex items-center gap-2">
-                            <FileText size={14} className="text-navy-500" /> Sumber Dokumen
-                        </h3>
-                        <p className="text-[11px] text-text-400 mt-1">{kb.documents.length} dokumen & konten</p>
-                    </div>
+                    {sidebarTab === 'docs' ? (
+                        <>
+                            <div className="p-4 border-b border-surface-200">
+                                <h3 className="font-bold text-navy-900 text-sm flex items-center gap-2">
+                                    <FileText size={14} className="text-navy-500" /> Sumber Dokumen
+                                </h3>
+                                <p className="text-[11px] text-text-400 mt-1">{kb.documents.length} dokumen & konten</p>
+                            </div>
 
-                    <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-                        {kb.documents.map(doc => (
-                            <div key={doc.id} className="group flex items-start gap-2.5 p-3 rounded-lg hover:bg-white transition border border-transparent hover:border-surface-200">
-                                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${doc.type === 'document' ? 'bg-navy-100' : 'bg-amber-100'}`}>
-                                    {doc.type === 'document' ? <File size={12} className="text-navy-600" /> : <FileText size={12} className="text-amber-600" />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-[13px] font-medium text-navy-900 truncate">{doc.title}</p>
-                                    <p className="text-[11px] text-text-400 mt-0.5 flex items-center gap-1">
-                                        <span className={`px-1 py-0.5 rounded text-[9px] font-semibold ${doc.type === 'document' ? 'bg-navy-100 text-navy-600' : 'bg-amber-100 text-amber-600'}`}>
-                                            {doc.type === 'document' ? 'DOC' : 'CONTENT'}
-                                        </span>
-                                        {doc.division}
-                                    </p>
-                                </div>
-                                <button onClick={() => onRemoveDoc(doc.id)}
-                                    className="opacity-0 group-hover:opacity-100 p-1 text-text-300 hover:text-danger transition shrink-0"
-                                    title="Hapus dari KB">
-                                    <X size={12} />
+                            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                                {kb.documents.map(doc => (
+                                    <div key={doc.id} className="group flex items-start gap-2.5 p-3 rounded-lg hover:bg-white transition border border-transparent hover:border-surface-200">
+                                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${doc.type === 'document' ? 'bg-navy-100' : 'bg-amber-100'}`}>
+                                            {doc.type === 'document' ? <File size={12} className="text-navy-600" /> : <FileText size={12} className="text-amber-600" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-[13px] font-medium text-navy-900 truncate">{doc.title}</p>
+                                            <p className="text-[11px] text-text-400 mt-0.5 flex items-center gap-1">
+                                                <span className={`px-1 py-0.5 rounded text-[9px] font-semibold ${doc.type === 'document' ? 'bg-navy-100 text-navy-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                    {doc.type === 'document' ? 'DOC' : 'CONTENT'}
+                                                </span>
+                                                {doc.division}
+                                            </p>
+                                        </div>
+                                        <button onClick={() => onRemoveDoc(doc.id)}
+                                            className="opacity-0 group-hover:opacity-100 p-1 text-text-300 hover:text-danger flex-shrink-0 transition"
+                                            title="Hapus dari KB">
+                                            <X size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="p-3 border-t border-surface-200">
+                                <button onClick={onAddDoc}
+                                    className="w-full py-2.5 px-4 border-2 border-dashed border-surface-300 hover:border-navy-400 text-text-500 hover:text-navy-600 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition">
+                                    <Plus size={14} /> Tambah Sumber
                                 </button>
                             </div>
-                        ))}
-                    </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="p-4 border-b border-surface-200 space-y-3">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="font-bold text-navy-900 text-sm flex items-center gap-2">
+                                        <MessageSquare size={14} className="text-navy-500" /> Riwayat Chat
+                                    </h3>
+                                    <button onClick={() => setShowNewSessionModal(true)} className="text-navy-600 hover:bg-navy-50 p-1.5 rounded-lg transition flex items-center gap-1 px-2" title="New Chat">
+                                        <Plus size={14} /> <span className="text-xs font-semibold">New</span>
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-300" size={14} />
+                                    <input type="text" placeholder="Search Chat..."
+                                        className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-surface-200 focus:border-navy-400 focus:ring-1 focus:ring-navy-400 rounded-lg outline-none transition" />
+                                </div>
+                            </div>
+                            
+                            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+                                {chatSessions.length === 0 ? (
+                                    <div className="text-center flex flex-col items-center gap-2 text-xs text-text-400 py-8">
+                                        <MessageSquare size={24} className="text-surface-300" />
+                                        Belum ada riwayat chat
+                                    </div>
+                                ) : chatSessions.map(session => (
+                                    <button key={session.id} onClick={() => onLoadSession(session.id)}
+                                        className="w-full flex items-start flex-col gap-1 p-3 rounded-lg hover:bg-white border border-transparent hover:border-surface-200 transition text-left">
+                                        <div className="text-[13px] font-medium text-navy-900 line-clamp-1">{session.title}</div>
+                                        <div className="text-[10px] text-text-400">{new Date(session.updatedAt).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
 
-                    <div className="p-3 border-t border-surface-200">
-                        <button onClick={onAddDoc}
-                            className="w-full py-2.5 px-4 border-2 border-dashed border-surface-300 hover:border-navy-400 text-text-500 hover:text-navy-600 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition">
-                            <Plus size={14} /> Tambah Sumber
-                        </button>
+            {/* New Session Confirmation Modal */}
+            {showNewSessionModal && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-transparent">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-xl animate-in fade-in zoom-in-95">
+                        <div className="p-6">
+                            <div className="w-12 h-12 bg-navy-100 rounded-xl flex items-center justify-center mb-4 mx-auto text-navy-600">
+                                <Plus size={24} />
+                            </div>
+                            <h2 className="text-lg font-bold text-navy-900 text-center mb-2">Mulai Sesi Baru?</h2>
+                            <p className="text-text-500 text-sm text-center">
+                                Anda akan memulai sesi chat baru. Riwayat chat saat ini akan disimpan dalam Riwayat Chat.
+                            </p>
+                        </div>
+                        <div className="bg-surface-50 p-4 border-t border-surface-200 flex gap-3">
+                            <button onClick={() => setShowNewSessionModal(false)}
+                                className="flex-1 py-2 px-4 border border-surface-200 text-text-600 font-medium rounded-xl hover:bg-white transition text-sm">
+                                Batal
+                            </button>
+                            <button onClick={handleConfirmNewSession}
+                                className="flex-1 py-2 px-4 bg-navy-600 text-white font-medium rounded-xl hover:bg-navy-700 transition shadow-sm text-sm">
+                                Ya, Mulai Sesi Baru
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -559,12 +654,12 @@ function KBChatView({ kb, onBack, onAddDoc, onRemoveDoc }: {
 }
 
 /* ═══════════════════════════════════════════
-   VIEW: ADD DOCS TO EXISTING KB
+   VIEW: ADD DOCS (Replaces old AddDocsModal)
    ═══════════════════════════════════════════ */
-function AddDocsModal({ allDocs, existingIds, onClose, onAdd }: {
+function AddDocsView({ allDocs, existingIds, onBack, onAdd }: {
     allDocs: DocItem[]
     existingIds: Set<string>
-    onClose: () => void
+    onBack: () => void
     onAdd: (docs: DocItem[]) => void
 }) {
     const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -581,57 +676,58 @@ function AddDocsModal({ allDocs, existingIds, onClose, onAdd }: {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
-                <div className="p-5 border-b border-surface-200 flex items-center justify-between">
+        <div className="space-y-6">
+            <div>
+                <button onClick={onBack}
+                    className="flex items-center gap-1.5 text-text-400 hover:text-navy-600 text-sm font-medium transition mb-3">
+                    <ArrowLeft size={14} /> Kembali ke Chat
+                </button>
+                <div className="flex items-center justify-between">
                     <div>
-                        <h3 className="font-bold text-navy-900 text-lg">Tambah Sumber</h3>
-                        <p className="text-text-400 text-sm mt-0.5">Pilih dokumen atau konten untuk ditambahkan</p>
+                        <h1 className="text-2xl font-bold font-display text-navy-900 flex items-center gap-2">
+                            <Plus size={22} className="text-navy-600" /> Tambah Sumber
+                        </h1>
+                        <p className="text-text-400 text-sm mt-1">Pilih dokumen atau konten untuk ditambahkan ke Knowledge Base ini</p>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-surface-100 rounded-lg transition text-text-400">
-                        <X size={18} />
+                    <button onClick={() => { onAdd(allDocs.filter(d => selected.has(d.id))); onBack() }}
+                        disabled={selected.size === 0}
+                        className="btn btn-primary flex items-center gap-2 disabled:opacity-50 px-6 py-2.5">
+                        <Plus size={16} /> Tambah {selected.size > 0 ? `(${selected.size})` : ''}
                     </button>
                 </div>
+            </div>
 
-                <div className="p-4 border-b border-surface-200">
+            <div className="card max-w-4xl mx-auto flex flex-col h-[calc(100vh-280px)] overflow-hidden">
+                <div className="p-5 border-b border-surface-200 shrink-0">
                     <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-300" size={14} />
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-300" size={16} />
                         <input type="text" placeholder="Cari dokumen..."
                             value={search} onChange={e => setSearch(e.target.value)}
-                            className="pl-9 pr-4 py-2 border rounded-lg w-full text-sm focus:ring-navy-600 focus:border-navy-600" />
+                            className="pl-10 pr-4 py-3 border border-surface-200 rounded-xl w-full text-[15px] focus:ring-navy-600 focus:border-navy-600 bg-surface-50 transition-all outline-none" />
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto divide-y">
+                <div className="flex-1 overflow-y-auto divide-y divide-surface-100 p-2 scrollbar-thin">
                     {filtered.length === 0 ? (
-                        <div className="p-8 text-center text-text-400 text-sm">Semua dokumen sudah ditambahkan</div>
+                        <div className="p-12 text-center text-text-400 text-sm flex flex-col items-center justify-center h-full">
+                            <FileText size={48} className="text-surface-300 mb-4 opacity-50" />
+                            <p>Semua dokumen tersedia sudah ditambahkan ke Knowledge Base ini</p>
+                        </div>
                     ) : filtered.map(doc => (
                         <button key={doc.id} onClick={() => toggleDoc(doc.id)}
-                            className={`w-full flex items-center gap-3 p-4 text-left transition hover:bg-surface-50 ${selected.has(doc.id) ? 'bg-navy-50' : ''}`}>
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition shrink-0 ${selected.has(doc.id) ? 'bg-navy-600 border-navy-600' : 'border-surface-300'}`}>
-                                {selected.has(doc.id) && <Check size={12} className="text-white" />}
+                            className={`w-full flex items-center gap-4 p-4 text-left transition-all rounded-xl border ${selected.has(doc.id) ? 'bg-navy-50/50 border-navy-200 shadow-sm' : 'border-transparent hover:bg-surface-50'}`}>
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition shrink-0 ${selected.has(doc.id) ? 'bg-navy-600 border-navy-600' : 'border-surface-300 bg-white'}`}>
+                                {selected.has(doc.id) && <Check size={12} className="text-white" strokeWidth={3} />}
                             </div>
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${doc.type === 'document' ? 'bg-navy-100' : 'bg-amber-100'}`}>
-                                {doc.type === 'document' ? <File size={14} className="text-navy-600" /> : <FileText size={14} className="text-amber-600" />}
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${doc.type === 'document' ? 'bg-navy-100' : 'bg-amber-100'}`}>
+                                {doc.type === 'document' ? <File size={16} className="text-navy-600" /> : <FileText size={16} className="text-amber-600" />}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <div className="font-medium text-navy-900 text-sm truncate">{doc.title}</div>
-                                <div className="text-[11px] text-text-400">{doc.division} · {doc.type === 'document' ? 'Dokumen' : 'Konten'}</div>
+                                <div className={`font-semibold text-sm truncate transition ${selected.has(doc.id) ? 'text-navy-900' : 'text-text-700'}`}>{doc.title}</div>
+                                <div className="text-[12px] text-text-400 mt-0.5">{doc.division} · <span className="font-medium">{doc.type === 'document' ? 'Dokumen' : 'Konten'}</span></div>
                             </div>
                         </button>
                     ))}
-                </div>
-
-                <div className="p-4 border-t border-surface-200 flex gap-3">
-                    <button onClick={onClose}
-                        className="px-4 py-2.5 border border-surface-200 rounded-xl text-sm font-medium text-text-600 hover:bg-surface-50 transition">
-                        Batal
-                    </button>
-                    <button onClick={() => { onAdd(allDocs.filter(d => selected.has(d.id))); onClose() }}
-                        disabled={selected.size === 0}
-                        className="btn btn-primary flex-1 flex items-center justify-center gap-2 disabled:opacity-50">
-                        <Plus size={14} /> Tambah {selected.size > 0 ? `(${selected.size})` : ''}
-                    </button>
                 </div>
             </div>
         </div>
@@ -641,7 +737,7 @@ function AddDocsModal({ allDocs, existingIds, onClose, onAdd }: {
 /* ═══════════════════════════════════════════
    MAIN PAGE CONTROLLER
    ═══════════════════════════════════════════ */
-type View = 'list' | 'create' | 'chat'
+type View = 'list' | 'create' | 'chat' | 'edit' | 'add-docs'
 
 export default function ContentsPage() {
     const { organization, role, division } = useCurrentUser()
@@ -649,8 +745,9 @@ export default function ContentsPage() {
     const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>(MOCK_KBS)
     const [activeKB, setActiveKB] = useState<KnowledgeBase | null>(null)
     const [allDocs, setAllDocs] = useState<DocItem[]>([])
-    const [showAddModal, setShowAddModal] = useState(false)
     const [loading, setLoading] = useState(true)
+    const [editKB, setEditKB] = useState<KnowledgeBase | null>(null)
+    const [chatSessions, setChatSessions] = useState<ChatSession[]>([])
 
     // Load real documents & contents
     useEffect(() => {
@@ -722,6 +819,19 @@ export default function ContentsPage() {
         setKnowledgeBases(prev => prev.map(kb => kb.id === updated.id ? updated : kb))
     }
 
+    // Placeholder for chat session handlers
+    const handleSaveSession = (session: ChatSession) => {
+        setChatSessions(prev => {
+            const existingIndex = prev.findIndex(s => s.id === session.id);
+            if (existingIndex > -1) {
+                const updatedSessions = [...prev];
+                updatedSessions[existingIndex] = session;
+                return updatedSessions;
+            }
+            return [...prev, session];
+        });
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center py-20">
@@ -750,17 +860,23 @@ export default function ContentsPage() {
                 <KBChatView
                     kb={activeKB}
                     onBack={() => { setView('list'); setActiveKB(null) }}
-                    onAddDoc={() => setShowAddModal(true)}
+                    onAddDoc={() => setView('add-docs')}
                     onRemoveDoc={handleRemoveDoc}
+                    chatSessions={chatSessions}
+                    onSaveSession={handleSaveSession}
+                    onLoadSession={() => {}}
+                    onNewSession={() => {}}
                 />
             )}
-
-            {showAddModal && activeKB && (
-                <AddDocsModal
+            {view === 'add-docs' && activeKB && (
+                <AddDocsView
                     allDocs={allDocs}
                     existingIds={new Set(activeKB.documents.map(d => d.id))}
-                    onClose={() => setShowAddModal(false)}
-                    onAdd={handleAddDocs}
+                    onBack={() => setView('chat')}
+                    onAdd={(docs) => {
+                        handleAddDocs(docs);
+                        setView('chat');
+                    }}
                 />
             )}
         </>

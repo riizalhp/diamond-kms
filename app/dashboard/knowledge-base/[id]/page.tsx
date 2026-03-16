@@ -1,18 +1,30 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getContentByIdAction, publishContentAction } from '@/lib/actions/content.actions'
 import { submitForApprovalAction } from '@/lib/actions/approval.actions'
 import { checkAcknowledgeStatusAction, acknowledgeReadAction } from '@/lib/actions/read-tracker.actions'
 import { createSuggestionAction } from '@/lib/actions/suggestion.actions'
+import { getReviewCommentsAction, createReviewCommentAction, resolveReviewCommentAction, deleteReviewCommentAction } from '@/lib/actions/review-comment.actions'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
-import { ArrowLeft, Edit, FileText, CheckCircle, ExternalLink, Send, MessageSquarePlus, Maximize2, Minimize2, Loader2, Bot, MessageSquare, Sparkles, Trash2, ClipboardList } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, CheckCircle, ExternalLink, Send, MessageSquarePlus, Maximize2, Minimize2, Loader2, Bot, MessageSquare, Sparkles, Trash2, ClipboardList, MessageCircle, X, Check, ChevronDown, ChevronUp } from 'lucide-react'
 import Link from 'next/link'
 
 interface ChatMessage {
     role: 'user' | 'assistant'
     content: string
+}
+
+interface ReviewComment {
+    id: string
+    content_id: string
+    author_id: string
+    author_name: string
+    highlighted_text: string
+    comment: string
+    is_resolved: boolean
+    created_at: Date
 }
 
 export default function ContentDetailPage() {
@@ -42,6 +54,17 @@ export default function ContentDetailPage() {
     const [articleFullscreen, setArticleFullscreen] = useState(false)
     const [reprocessing, setReprocessing] = useState(false)
 
+    // Review comments state
+    const [reviewComments, setReviewComments] = useState<ReviewComment[]>([])
+    const [showCommentForm, setShowCommentForm] = useState(false)
+    const [selectedText, setSelectedText] = useState('')
+    const [commentText, setCommentText] = useState('')
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false)
+    const [showCommentPanel, setShowCommentPanel] = useState(false)
+    const articleRef = useRef<HTMLElement>(null)
+    const tooltipRef = useRef<HTMLDivElement>(null)
+    const [selectionTooltip, setSelectionTooltip] = useState<{ top: number; left: number } | null>(null)
+
     // Fetch chat history on mount
     useEffect(() => {
         if (params.id) {
@@ -55,6 +78,97 @@ export default function ContentDetailPage() {
                 }).catch(() => { })
         }
     }, [params.id])
+
+    // Load review comments
+    const loadReviewComments = useCallback(async () => {
+        if (!params.id) return
+        const res = await getReviewCommentsAction(params.id as string)
+        if (res.success) {
+            setReviewComments(res.data || [])
+        }
+    }, [params.id])
+
+    useEffect(() => {
+        loadReviewComments()
+    }, [loadReviewComments])
+
+    // Text selection handler for inline commenting
+    const handleTextSelection = useCallback(() => {
+        // Skip if comment form is open
+        if (showCommentForm) return
+
+        const selection = window.getSelection()
+        if (!selection || selection.isCollapsed || !articleRef.current) {
+            // Don't clear tooltip if we clicked inside the tooltip itself
+            setTimeout(() => {
+                const activeEl = document.activeElement
+                if (tooltipRef.current?.contains(activeEl)) return
+                setSelectionTooltip(null)
+            }, 100)
+            return
+        }
+
+        // Only allow selection within the article body
+        const range = selection.getRangeAt(0)
+        if (!articleRef.current.contains(range.commonAncestorContainer)) {
+            setSelectionTooltip(null)
+            return
+        }
+
+        const text = selection.toString().trim()
+        if (text.length < 3) {
+            setSelectionTooltip(null)
+            return
+        }
+
+        const rect = range.getBoundingClientRect()
+        setSelectedText(text)
+        setSelectionTooltip({
+            top: rect.top + window.scrollY - 45,
+            left: rect.left + window.scrollX + rect.width / 2 - 70,
+        })
+    }, [showCommentForm])
+
+    useEffect(() => {
+        document.addEventListener('mouseup', handleTextSelection)
+        return () => document.removeEventListener('mouseup', handleTextSelection)
+    }, [handleTextSelection])
+
+    const openCommentForm = () => {
+        setShowCommentForm(true)
+        setShowCommentPanel(true)
+        setSelectionTooltip(null)
+        setCommentText('')
+    }
+
+    const handleSubmitComment = async () => {
+        if (!user?.id || !selectedText.trim() || !commentText.trim()) return
+        setIsSubmittingComment(true)
+        const res = await createReviewCommentAction({
+            contentId: params.id as string,
+            authorId: user.id,
+            highlightedText: selectedText,
+            comment: commentText,
+        })
+        if (res.success) {
+            setShowCommentForm(false)
+            setCommentText('')
+            setSelectedText('')
+            loadReviewComments()
+        }
+        setIsSubmittingComment(false)
+    }
+
+    const handleResolveComment = async (commentId: string) => {
+        await resolveReviewCommentAction(commentId)
+        loadReviewComments()
+    }
+
+    const handleDeleteComment = async (commentId: string) => {
+        if (!confirm('Hapus komentar ini?')) return
+        await deleteReviewCommentAction(commentId)
+        loadReviewComments()
+    }
 
     useEffect(() => {
         if (params.id) {
@@ -416,7 +530,7 @@ export default function ContentDetailPage() {
             <div className="text-center space-y-2">
                 <FileText size={40} className="text-text-300 mx-auto" />
                 <p className="text-danger font-semibold">Article not found</p>
-                <Link href="/dashboard/contents" className="btn btn-secondary text-sm mt-2">
+                <Link href="/dashboard/knowledge-base" className="btn btn-secondary text-sm mt-2">
                     <ArrowLeft size={14} /> Back
                 </Link>
             </div>
@@ -433,7 +547,7 @@ export default function ContentDetailPage() {
     return (
         <div className="flex flex-col h-[calc(100vh-100px)]">
             <div className="flex items-center gap-4 border-b border-surface-200 pb-4 mb-4 shrink-0">
-                <Link href="/dashboard/contents" className="p-2 text-text-500 hover:text-navy-900 hover:bg-surface-100 rounded-full transition">
+                <Link href="/dashboard/knowledge-base" className="p-2 text-text-500 hover:text-navy-900 hover:bg-surface-100 rounded-full transition">
                     <ArrowLeft size={20} />
                 </Link>
                 <div className="flex-1">
@@ -485,11 +599,29 @@ export default function ContentDetailPage() {
                             Edit
                         </button>
                     )}
+
+                    {/* Review Comments Toggle */}
+                    {reviewComments.length > 0 && (
+                        <button
+                            onClick={() => setShowCommentPanel(!showCommentPanel)}
+                            className={`px-4 py-2 font-medium rounded-md transition flex items-center gap-2 ${
+                                showCommentPanel
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                            }`}
+                        >
+                            <MessageCircle size={18} />
+                            Komentar
+                            <span className="bg-amber-500 text-white text-[11px] font-bold rounded-full px-1.5 py-0.5 min-w-[20px] text-center">
+                                {reviewComments.filter(c => !c.is_resolved).length}
+                            </span>
+                        </button>
+                    )}
                 </div>
             </div>
 
             {/* Content Area - Split Panel when Published, Single container when Draft */}
-            <div className={`flex-1 min-h-0 flex gap-4 ${!isPublished ? 'max-w-5xl mx-auto w-full' : 'w-full'}`}>
+            <div className={`flex-1 min-h-0 flex gap-4 ${(!isPublished && !showCommentPanel) ? 'max-w-5xl mx-auto w-full' : 'w-full'}`}>
 
                 {/* LEFT SIDE - AI CHAT (Only if published) */}
                 {isPublished && !articleFullscreen && (
@@ -688,9 +820,23 @@ export default function ContentDetailPage() {
 
                         {/* HTML rendering area */}
                         <article
+                            ref={articleRef}
                             className="prose prose-slate max-w-none prose-headings:font-bold font-display prose-headings:tracking-tight prose-a:text-navy-600 pt-2"
                             dangerouslySetInnerHTML={{ __html: content.body }}
                         />
+
+                        {/* Selection Tooltip - appears when user highlights text */}
+                        {selectionTooltip && ['SUPER_ADMIN', 'GROUP_ADMIN', 'MAINTAINER'].includes(role || '') && !isPublished && (
+                            <div
+                                ref={tooltipRef}
+                                className="fixed z-50 bg-navy-900 text-white rounded-lg shadow-xl px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-navy-800 transition"
+                                style={{ top: selectionTooltip.top, left: selectionTooltip.left }}
+                                onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); openCommentForm(); }}
+                            >
+                                <MessageCircle size={14} />
+                                <span className="text-xs font-medium whitespace-nowrap">Tambah Komentar</span>
+                            </div>
+                        )}
 
                         {content.source_documents && content.source_documents.length > 0 && (
                             <div className="mt-16 pt-6 border-t">
@@ -778,6 +924,112 @@ export default function ContentDetailPage() {
                         )}
                     </div>
                 </div>
+
+                {/* RIGHT SIDEBAR - Review Comments Panel */}
+                {showCommentPanel && !isPublished && (
+                    <div className="w-[340px] min-w-[300px] bg-white rounded-xl shadow-sm border flex flex-col overflow-hidden shrink-0">
+                        <div className="px-4 py-3 border-b border-surface-200 bg-amber-50 flex items-center justify-between shrink-0">
+                            <h3 className="font-bold text-amber-900 text-sm flex items-center gap-2">
+                                <MessageCircle size={15} className="text-amber-600" />
+                                Review ({reviewComments.filter(c => !c.is_resolved).length})
+                            </h3>
+                            <button onClick={() => setShowCommentPanel(false)} className="p-1 text-amber-600 hover:text-amber-800 rounded">
+                                <X size={14} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto">
+                            {/* New Comment Form */}
+                            {showCommentForm && selectedText && (
+                                <div className="p-4 border-b border-amber-200 bg-amber-50/30">
+                                    <div className="text-xs font-semibold text-amber-800 mb-2 flex items-center gap-1.5">
+                                        <MessageCircle size={12} /> Komentar Baru
+                                    </div>
+                                    <div className="bg-amber-100/70 border border-amber-200 rounded-md p-2 mb-3 text-xs text-amber-900 italic line-clamp-3">
+                                        &quot;{selectedText}&quot;
+                                    </div>
+                                    <textarea
+                                        value={commentText}
+                                        onChange={(e) => setCommentText(e.target.value)}
+                                        placeholder="Tulis komentar atau saran revisi..."
+                                        className="w-full border border-surface-200 rounded-md p-2.5 text-sm focus:ring-navy-600 focus:border-navy-600 min-h-[70px] resize-none"
+                                        autoFocus
+                                    />
+                                    <div className="flex justify-end gap-2 mt-2">
+                                        <button
+                                            onClick={() => { setShowCommentForm(false); setSelectedText('') }}
+                                            className="px-3 py-1.5 text-xs text-text-500 hover:bg-surface-100 rounded transition"
+                                        >
+                                            Batal
+                                        </button>
+                                        <button
+                                            onClick={handleSubmitComment}
+                                            disabled={isSubmittingComment || !commentText.trim()}
+                                            className="px-3 py-1.5 text-xs bg-navy-600 text-white rounded hover:bg-navy-700 transition disabled:opacity-50 flex items-center gap-1.5"
+                                        >
+                                            {isSubmittingComment ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                                            Kirim
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Comment List */}
+                            {reviewComments.length === 0 ? (
+                                <div className="p-6 text-center text-text-400 text-sm">
+                                    <MessageCircle size={28} className="mx-auto mb-2 text-text-300" />
+                                    <p>Belum ada komentar.</p>
+                                    <p className="text-xs mt-1">Highlight teks di artikel untuk menambah komentar.</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-surface-100">
+                                    {reviewComments.map(rc => (
+                                        <div key={rc.id} className={`p-3 ${rc.is_resolved ? 'opacity-50 bg-surface-50' : 'hover:bg-surface-50'} transition`}>
+                                            <div className="flex items-start gap-2.5">
+                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-bold ${
+                                                    rc.is_resolved ? 'bg-green-100 text-green-700' : 'bg-amber-200 text-amber-800'
+                                                }`}>
+                                                    {rc.author_name.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <span className="font-semibold text-navy-900 text-xs">{rc.author_name}</span>
+                                                        <span className="text-[9px] text-text-400">
+                                                            {new Date(rc.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                        {rc.is_resolved && (
+                                                            <span className="text-[9px] bg-green-100 text-green-700 px-1 py-0.5 rounded font-medium">✓</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-1.5 text-[11px] text-amber-800 italic line-clamp-2">
+                                                        &quot;{rc.highlighted_text.length > 80 ? rc.highlighted_text.slice(0, 80) + '...' : rc.highlighted_text}&quot;
+                                                    </div>
+                                                    <p className="text-xs text-text-700 leading-relaxed">{rc.comment}</p>
+                                                    {!rc.is_resolved && ['SUPER_ADMIN', 'GROUP_ADMIN', 'MAINTAINER'].includes(role || '') && (
+                                                        <div className="flex items-center gap-1.5 mt-1.5">
+                                                            <button
+                                                                onClick={() => handleResolveComment(rc.id)}
+                                                                className="text-[10px] text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2 py-0.5 rounded flex items-center gap-1 transition"
+                                                            >
+                                                                <Check size={10} /> Resolve
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteComment(rc.id)}
+                                                                className="text-[10px] text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-0.5 rounded flex items-center gap-1 transition"
+                                                            >
+                                                                <Trash2 size={10} /> Hapus
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     )

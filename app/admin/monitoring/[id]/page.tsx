@@ -6,8 +6,11 @@ import {
     ArrowLeft, Activity, Cpu, HardDrive, Database, Bot, Users,
     AlertTriangle, Shield, MessageSquare, CheckCircle2, XCircle,
     AlertCircle, Clock, Wifi, WifiOff, Server, Zap,
-    BookOpen, Trophy, RefreshCw, MemoryStick
+    BookOpen, Trophy, RefreshCw, MemoryStick,
+    Key, KeyRound, Timer, Tag, Plug, Wrench,
+    DatabaseBackup, ArrowUpCircle, Hourglass, Settings2
 } from 'lucide-react'
+import Link from 'next/link'
 
 /* ───────── Types ───────── */
 interface Instance {
@@ -250,25 +253,36 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
         )
     }
 
-    const i = instance
+    const i = instance!
     const h = history
 
+    const handleAction = (action: string) => {
+        alert(`${action} for client ${i.client_name} triggered (Mock)`)
+    }
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-12">
             {/* Back + Header */}
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <button onClick={() => router.push('/admin/monitoring')}
-                        className="flex items-center gap-1.5 text-white/40 hover:text-amber-400 text-[13px] font-medium transition-colors mb-3">
+                        className="flex items-center gap-1.5 text-white/40 hover:text-amber-400 text-[13px] font-medium transition-colors mb-4">
                         <ArrowLeft size={14} /> Kembali ke Monitor
                     </button>
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20">
-                            <Server size={22} className="text-white" />
+                        <div className="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl flex items-center justify-center shadow-lg shadow-amber-500/20">
+                            <Server size={26} className="text-white" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-bold font-display text-white">{i.client_name}</h1>
-                            <div className="flex items-center gap-3 mt-1">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <h1 className="text-2xl font-bold font-display text-white">{i.client_name}</h1>
+                                {i.approval_pending > 0 && (
+                                    <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/15 text-amber-400 rounded-full text-[10px] font-bold animate-pulse ring-1 ring-amber-500/20 uppercase tracking-tighter">
+                                        <Hourglass size={10} /> {i.approval_pending} Pending
+                                    </span>
+                                )}
+                            </div>
+                            <div className="flex items-center gap-3">
                                 <StatusBadge status={i.status} size="md" />
                                 <span className="text-[11px] font-mono bg-white/[0.06] px-2 py-0.5 rounded text-white/50">{i.app_version}</span>
                                 <span className="text-[11px] text-white/30">{i.instance_key}</span>
@@ -279,6 +293,113 @@ export default function ClientDetailPage({ params }: { params: { id: string } })
                 <div className="text-right">
                     <div className={`text-3xl font-black tabular-nums ${getHealthColor(i.health_score)}`}>{Math.round(i.health_score)}</div>
                     <div className="text-[10px] text-white/30 font-semibold uppercase tracking-wider">Health Score</div>
+                </div>
+            </div>
+
+            {/* ═══════ QUCK MANAGEMENT SECTION ═══════ */}
+            <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 blur-3xl -mr-16 -mt-16 rounded-full" />
+                <div className="absolute bottom-0 left-0 w-32 h-32 bg-orange-500/5 blur-3xl -ml-16 -mb-16 rounded-full" />
+                
+                <div className="relative flex flex-col md:flex-row gap-6">
+                    {/* Subscription Info */}
+                    <div className="flex-1 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-[14px] font-bold text-white/80 flex items-center gap-2">
+                                <Shield size={16} className="text-amber-400" /> Subscription & License
+                            </h2>
+                            <span className={`text-[11px] font-bold px-3 py-1 rounded-full uppercase tracking-wider ring-1 ${
+                                i.license_plan === 'enterprise' ? 'bg-purple-500/15 text-purple-400 ring-purple-500/20' :
+                                i.license_plan === 'pro' ? 'bg-blue-500/15 text-blue-400 ring-blue-500/20' :
+                                'bg-white/5 text-white/40 ring-white/10'}`}>
+                                {i.license_plan} Tier
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3">
+                                <div className="text-[10px] text-white/30 font-semibold uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                                    <Clock size={10} /> Valid Until
+                                </div>
+                                <div className="text-[14px] font-bold text-white/90">
+                                    {i.license_expires ? new Date(i.license_expires).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}
+                                </div>
+                            </div>
+                            <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-3">
+                                <div className="text-[10px] text-white/30 font-semibold uppercase tracking-wide mb-1 flex items-center gap-1.5">
+                                    <Timer size={10} /> Time Remaining
+                                </div>
+                                {(() => {
+                                    const days = daysUntil(i.license_expires)
+                                    return (
+                                        <div className={`text-[14px] font-bold ${days > 180 ? 'text-emerald-400' : days > 90 ? 'text-amber-400' : 'text-red-400'}`}>
+                                            {days > 0 ? `${days} hari tersisa` : 'Expired'}
+                                        </div>
+                                    )
+                                })()}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-px bg-white/[0.08] hidden md:block" />
+
+                    {/* Management Actions */}
+                    <div className="flex-[1.5] space-y-4">
+                        <h2 className="text-[14px] font-bold text-white/80 flex items-center gap-2">
+                            <Settings2 size={16} className="text-amber-400" /> Management Actions
+                        </h2>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <button 
+                                onClick={() => handleAction('Generate Activation OTP')}
+                                className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-amber-500/10 to-transparent hover:from-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl text-[12px] font-semibold transition-all group">
+                                <div className="w-7 h-7 bg-amber-500/20 rounded-lg flex items-center justify-center group-hover:bg-amber-500/30 transition-colors">
+                                    <Key size={14} />
+                                </div>
+                                Generate Activation OTP
+                            </button>
+                            <button 
+                                onClick={() => handleAction('Generate AI API Key')}
+                                className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-blue-500/10 to-transparent hover:from-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl text-[12px] font-semibold transition-all group">
+                                <div className="w-7 h-7 bg-blue-500/20 rounded-lg flex items-center justify-center group-hover:bg-blue-500/30 transition-colors">
+                                    <KeyRound size={14} />
+                                </div>
+                                Generate AI API Key
+                            </button>
+                            <button 
+                                onClick={() => handleAction('Connect')}
+                                className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-emerald-500/10 to-transparent hover:from-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-[12px] font-semibold transition-all group">
+                                <div className="w-7 h-7 bg-emerald-500/20 rounded-lg flex items-center justify-center group-hover:bg-emerald-500/30 transition-colors">
+                                    <Plug size={14} />
+                                </div>
+                                Remote Connect
+                            </button>
+                            <button 
+                                onClick={() => handleAction('Maintenance Mode')}
+                                className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-orange-500/10 to-transparent hover:from-orange-500/20 text-orange-400 border border-orange-500/20 rounded-xl text-[12px] font-semibold transition-all group">
+                                <div className="w-7 h-7 bg-orange-500/20 rounded-lg flex items-center justify-center group-hover:bg-orange-500/30 transition-colors">
+                                    <Wrench size={14} />
+                                </div>
+                                Maintenance Mode
+                            </button>
+                            <button 
+                                onClick={() => handleAction('Backup Database')}
+                                className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-cyan-500/10 to-transparent hover:from-cyan-500/20 text-cyan-400 border border-cyan-500/20 rounded-xl text-[12px] font-semibold transition-all group">
+                                <div className="w-7 h-7 bg-cyan-500/20 rounded-lg flex items-center justify-center group-hover:bg-cyan-500/30 transition-colors">
+                                    <Database size={14} />
+                                </div>
+                                Backup Database
+                            </button>
+                            <button 
+                                onClick={() => handleAction('Update Client')}
+                                className="flex items-center gap-2.5 px-3 py-2 bg-gradient-to-r from-indigo-500/10 to-transparent hover:from-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-[12px] font-semibold transition-all group">
+                                <div className="w-7 h-7 bg-indigo-500/20 rounded-lg flex items-center justify-center group-hover:bg-indigo-500/30 transition-colors">
+                                    <ArrowUpCircle size={14} />
+                                </div>
+                                Update Client
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 

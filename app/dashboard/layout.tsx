@@ -8,15 +8,17 @@ import {
     Home, FileText, Tags, Bot, Award, FileQuestion, Users,
     Network, CreditCard, Activity, CheckSquare, ListTodo,
     Shield, FolderTree, Settings, Menu, Sparkles, Wrench,
-    ChevronDown, KeyRound, Building
+    ChevronDown, KeyRound, Building, MonitorDot
 } from 'lucide-react'
 import { NotificationBell } from '@/components/shared/NotificationBell'
 
 // Icon mapping function
 const getIconForLabel = (label: string) => {
     switch (label) {
-        case 'Documents': return <FileText size={16} />
+        case 'Documents':
+        case 'Dokumen': return <FileText size={16} />
         case 'Knowledge Base': return <Tags size={16} />
+        case 'Content': return <FileText size={16} />
         case 'Quizzes': return <FileQuestion size={16} />
         case 'Pemahaman Pegawai': return <Award size={16} />
         case 'FAQs / Help': return <Bot size={16} />
@@ -39,6 +41,7 @@ const getIconForLabel = (label: string) => {
         case 'Dashboard': return <Home size={16} />
         case 'OTP': return <KeyRound size={16} />
         case 'Organization Settings': return <Building size={16} />
+        case 'Akses Remote': return <MonitorDot size={16} />
         default: return <FileText size={16} />
     }
 }
@@ -64,18 +67,24 @@ function isNavGroup(entry: NavEntry): entry is NavGroup {
 const getNavEntries = (role?: string): NavEntry[] => {
     const base: NavEntry[] = [
         { label: 'Dashboard', href: '/dashboard' },
-        { label: 'Documents', href: '/dashboard/documents' },
-        { label: 'Knowledge Base', href: '/dashboard/contents' },
+        {
+            label: 'Knowledge Base',
+            icon: 'Tags',
+            children: [
+                { label: 'Knowledge Base', href: '/dashboard/knowledge-base' },
+                { label: 'Dokumen', href: '/dashboard/documents' },
+                { label: 'Content', href: '/dashboard/content' }
+            ]
+        },
         { label: 'AI Assistant', href: '/dashboard/ai-assistant' },
         { label: 'Quizzes', href: '/dashboard/quizzes' },
         { label: 'Pemahaman Pegawai', href: '/dashboard/leaderboard' },
-        { label: 'FAQs / Help', href: '/dashboard/faqs' }
+        { label: 'FAQs / Help', href: '/dashboard/faqs' },
     ]
 
     if (role === 'SUPER_ADMIN') {
         return [
             ...base,
-            { label: 'Approvals', href: '/dashboard/approvals' },
             { label: 'Read Trackers', href: '/dashboard/trackers' },
             { label: 'Suggestions', href: '/dashboard/suggestions' },
             { label: 'Users', href: '/dashboard/hrd/users' },
@@ -97,7 +106,6 @@ const getNavEntries = (role?: string): NavEntry[] => {
     if (role === 'GROUP_ADMIN') {
         return [
             ...base,
-            { label: 'Approvals', href: '/dashboard/approvals' },
             { label: 'Read Trackers', href: '/dashboard/trackers' },
             { label: 'Suggestions', href: '/dashboard/suggestions' },
             { label: 'Users', href: '/dashboard/hrd/users' },
@@ -117,7 +125,7 @@ const getNavEntries = (role?: string): NavEntry[] => {
             { label: 'System Overview', href: '/dashboard/maintainer' },
             { label: 'Organizations', href: '/dashboard/maintainer/organizations' },
             { label: 'AI Providers', href: '/dashboard/maintainer/ai-providers' },
-            { label: 'Monitoring', href: '/dashboard/maintainer/monitoring' },
+            { label: 'Monitoring', href: '/admin/monitoring' },
             { label: 'Logs', href: '/dashboard/maintainer/logs' },
         ]
     }
@@ -141,14 +149,14 @@ function SidebarGroup({ group, pathname }: { group: NavGroup; pathname: string }
                 }`}
             >
                 <span className="flex items-center gap-3">
-                    <span className={hasActiveChild ? 'text-navy-400' : 'text-surface-300'}>
+                    <span className={hasActiveChild ? 'text-amber-400' : 'text-surface-300'}>
                         <Settings size={16} />
                     </span>
-                    {group.label}
+                    <span className="text-white">{group.label}</span>
                 </span>
                 <ChevronDown
                     size={14}
-                    className={`transition-transform duration-200 ${open ? 'rotate-180' : ''} ${hasActiveChild ? 'text-navy-400' : 'text-surface-400'}`}
+                    className={`transition-transform duration-200 ${open ? 'rotate-180' : ''} text-white`}
                 />
             </button>
 
@@ -163,14 +171,14 @@ function SidebarGroup({ group, pathname }: { group: NavGroup; pathname: string }
                                 href={child.href}
                                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
                                     isActive
-                                        ? 'bg-navy-600/20 text-white'
-                                        : 'text-surface-400 hover:text-white hover:bg-white/5'
+                                        ? 'bg-navy-600/20'
+                                        : 'hover:bg-white/5'
                                 }`}
                             >
-                                <span className={isActive ? 'text-amber-400' : 'text-surface-400'}>
+                                <span className={isActive ? 'text-amber-400' : 'text-white'}>
                                     {getIconForLabel(child.label)}
                                 </span>
-                                {child.label}
+                                <span className="text-white">{child.label}</span>
                             </Link>
                         )
                     })}

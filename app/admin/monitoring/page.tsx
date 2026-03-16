@@ -6,8 +6,20 @@ import {
     Activity, Bot, Users, AlertTriangle, Shield,
     MessageSquare, CheckCircle2, XCircle, AlertCircle, Clock,
     Wifi, WifiOff, ChevronUp, ChevronDown, BarChart3,
-    RefreshCw, Server, Database, Cpu, HardDrive, Zap
+    RefreshCw, Server, Database, Cpu, HardDrive, Zap,
+    Plus, Key, KeyRound, Timer, Tag, Plug, Wrench,
+    DatabaseBackup, ArrowUpCircle, Hourglass, Power, Settings2,
+    Calendar, Globe, Mail, Building2, Save, X
 } from 'lucide-react'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+    DialogTrigger,
+} from "@/components/ui/dialog"
 
 /* ───────────── Types ───────────── */
 interface ClientInstance {
@@ -483,10 +495,111 @@ function VersionsTab({ data, sf, sd, onSort }: { data: ClientInstance[]; sf: str
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   TAB 6: CLIENTS MANAGEMENT
+   ═══════════════════════════════════════════════════════════════════ */
+function ClientsTab({ data, onAction }: { data: ClientInstance[]; onAction: (id: string, action: string) => void }) {
+    return (
+        <div className="space-y-3 p-2">
+            {data.map(i => {
+                const days = daysUntil(i.license_expires)
+                const planColors: Record<string, string> = {
+                    enterprise: 'bg-purple-500/15 text-purple-400 ring-purple-500/20',
+                    pro: 'bg-blue-500/15 text-blue-400 ring-blue-500/20',
+                    basic: 'bg-white/5 text-white/40 ring-white/10',
+                }
+                return (
+                    <div key={i.id} className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-4 hover:bg-white/[0.05] transition-colors">
+                        {/* Row 1: Client info + primary actions */}
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                                    i.status === 'online' ? 'bg-emerald-500/15' : i.status === 'warning' ? 'bg-amber-500/15' : 'bg-red-500/15'
+                                }`}>
+                                    <Server size={16} className={i.status === 'online' ? 'text-emerald-400' : i.status === 'warning' ? 'text-amber-400' : 'text-red-400'} />
+                                </div>
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <Link href={`/admin/monitoring/${i.id}`} className="font-bold text-white/90 text-[14px] hover:text-amber-400 transition-colors truncate">
+                                            {i.client_name}
+                                        </Link>
+                                        <StatusBadge status={i.status} />
+                                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full capitalize ring-1 ${planColors[i.license_plan] ?? planColors.basic}`}>
+                                            {i.license_plan}
+                                        </span>
+                                    </div>
+                                    <div className="text-[11px] text-white/30 mt-0.5">
+                                        {i.app_version} · {i.total_users} users · {i.total_documents} docs
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Time Remaining badge */}
+                            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 ${
+                                days > 180 ? 'bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20'
+                                : days > 90 ? 'bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20'
+                                : 'bg-red-500/10 text-red-400 ring-1 ring-red-500/20'
+                            }`}>
+                                <Timer size={12} />
+                                {days > 0 ? `${days} hari tersisa` : 'Expired'}
+                            </div>
+                        </div>
+
+                        {/* Row 2: Action buttons */}
+                        <div className="flex flex-wrap gap-2">
+                            <button 
+                                onClick={() => onAction(i.id, 'Generate Activation OTP')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-amber-500/15 hover:ring-amber-500/30">
+                                <Key size={12} /> Generate Activation OTP
+                            </button>
+                            <button 
+                                onClick={() => onAction(i.id, 'Generate AI API Key')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-blue-500/15 hover:ring-blue-500/30">
+                                <KeyRound size={12} /> Generate AI API Key
+                            </button>
+                            <button 
+                                onClick={() => onAction(i.id, 'Extend License')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-purple-500/15 hover:ring-purple-500/30">
+                                <Timer size={12} /> Perpanjang Lisensi
+                            </button>
+                            <button 
+                                onClick={() => onAction(i.id, 'Connect')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-emerald-500/15 hover:ring-emerald-500/30">
+                                <Plug size={12} /> Connect
+                            </button>
+                            <button 
+                                onClick={() => onAction(i.id, 'Maintenance Mode')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-orange-500/15 hover:ring-orange-500/30">
+                                <Wrench size={12} /> Maintenance Mode
+                            </button>
+                            <button 
+                                onClick={() => onAction(i.id, 'Backup Database')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-cyan-500/15 hover:ring-cyan-500/30">
+                                <Database size={12} /> Backup Database
+                            </button>
+                            <button 
+                                onClick={() => onAction(i.id, 'Update Client')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 rounded-lg text-[11px] font-semibold transition-all ring-1 ring-indigo-500/15 hover:ring-indigo-500/30">
+                                <ArrowUpCircle size={12} /> Update Client
+                            </button>
+                            {i.approval_pending > 0 && (
+                                <span className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/15 text-amber-400 rounded-lg text-[11px] font-semibold ring-1 ring-amber-500/20">
+                                    <Hourglass size={12} /> {i.approval_pending} Pending
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    MAIN PAGE
    ═══════════════════════════════════════════════════════════════════ */
 const TABS = [
     { id: 'overview', label: 'Overview', icon: Activity },
+    { id: 'clients', label: 'Clients', icon: Settings2 },
     { id: 'ai', label: 'AI Pipeline', icon: Bot },
     { id: 'engagement', label: 'Engagement', icon: Users },
     { id: 'errors', label: 'Errors', icon: AlertTriangle },
@@ -502,6 +615,32 @@ export default function AdminMonitoringPage() {
     const [sortField, setSortField] = useState('client_name')
     const [sortDir, setSortDir] = useState<SortDir>('asc')
     const [lastRefresh, setLastRefresh] = useState(new Date())
+
+    // Modal states
+    const [isAddClientOpen, setIsAddClientOpen] = useState(false)
+    const [isSubmitting, setIsSubmitting] = useState(false)
+    const [newClient, setNewClient] = useState({
+        client_name: '',
+        app_version: '1.0.0',
+        license_plan: 'basic',
+        license_expires: '',
+    })
+
+    const handleAddClient = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setIsSubmitting(true)
+        // Simulate API call
+        setTimeout(() => {
+            alert(`Client ${newClient.client_name} added successfully! (Mock)`)
+            setIsSubmitting(false)
+            setIsAddClientOpen(false)
+            setNewClient({ client_name: '', app_version: '1.0.0', license_plan: 'basic', license_expires: '' })
+        }, 1000)
+    }
+
+    const handleAction = (clientId: string, action: string) => {
+        alert(`${action} for client ${clientId} triggered (Mock)`)
+    }
 
     const fetchData = () => {
         setLoading(true)
@@ -554,10 +693,94 @@ export default function AdminMonitoringPage() {
                     </h1>
                     <p className="text-[13px] text-white/40 mt-1">Monitoring semua instance Diamond KMS on-premise</p>
                 </div>
-                <button onClick={fetchData}
-                    className="flex items-center gap-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white/70 hover:text-white rounded-xl text-[13px] font-semibold transition-all border border-white/[0.08]">
-                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
-                </button>
+
+                <div className="flex items-center gap-3">
+                    <button onClick={fetchData}
+                        className="flex items-center gap-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.10] text-white/70 hover:text-white rounded-xl text-[13px] font-semibold transition-all border border-white/[0.08]">
+                        <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Refresh
+                    </button>
+
+                    <Dialog open={isAddClientOpen} onOpenChange={setIsAddClientOpen}>
+                        <DialogTrigger asChild>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white rounded-xl text-[13px] font-bold transition-all shadow-lg shadow-amber-500/20">
+                                <Plus size={14} /> Add Client
+                            </button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-navy-900 border-white/[0.08] text-white sm:max-w-[450px]">
+                            <DialogHeader>
+                                <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                                    <Plus className="text-amber-400" size={20} /> Tambah Client Baru
+                                </DialogTitle>
+                                <DialogDescription className="text-white/40">
+                                    Daftarkan instance Diamond KMS baru untuk dimonitor.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <form onSubmit={handleAddClient} className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-white/60 uppercase tracking-wider">Nama Client</label>
+                                    <input
+                                        required
+                                        value={newClient.client_name}
+                                        onChange={e => setNewClient({ ...newClient, client_name: e.target.value })}
+                                        className="w-full bg-white/[0.04] border border-white/[0.1] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                                        placeholder="Contoh: PT Diamond Sakti"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-white/60 uppercase tracking-wider">Versi App</label>
+                                        <input
+                                            required
+                                            value={newClient.app_version}
+                                            onChange={e => setNewClient({ ...newClient, app_version: e.target.value })}
+                                            className="w-full bg-white/[0.04] border border-white/[0.1] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                                            placeholder="1.0.0"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-semibold text-white/60 uppercase tracking-wider">License Plan</label>
+                                        <select
+                                            value={newClient.license_plan}
+                                            onChange={e => setNewClient({ ...newClient, license_plan: e.target.value })}
+                                            className="w-full bg-navy-950 border border-white/[0.1] rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                                        >
+                                            <option value="basic">Basic (Free)</option>
+                                            <option value="pro">Professional</option>
+                                            <option value="enterprise">Enterprise</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs font-semibold text-white/60 uppercase tracking-wider">Masa Berlaku Lisensi</label>
+                                    <div className="relative">
+                                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+                                        <input
+                                            type="date"
+                                            required
+                                            value={newClient.license_expires}
+                                            onChange={e => setNewClient({ ...newClient, license_expires: e.target.value })}
+                                            className="w-full bg-white/[0.04] border border-white/[0.1] rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 transition-all"
+                                        />
+                                    </div>
+                                </div>
+                                <DialogFooter className="pt-4 gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddClientOpen(false)}
+                                        className="px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] text-white/70 rounded-lg text-sm font-semibold transition-all">
+                                        Batal
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isSubmitting}
+                                        className="flex items-center gap-2 px-6 py-2 bg-amber-500 hover:bg-amber-400 text-navy-950 rounded-lg text-sm font-bold transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50">
+                                        {isSubmitting ? 'Menyimpan...' : 'Simpan Client'}
+                                    </button>
+                                </DialogFooter>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
+                </div>
             </div>
 
             {/* Summary Cards */}
@@ -612,6 +835,7 @@ export default function AdminMonitoringPage() {
                 {/* Content */}
                 <div className="p-2">
                     {tab === 'overview' && <OverviewTab data={sorted} sf={sortField} sd={sortDir} onSort={handleSort} />}
+                    {tab === 'clients' && <ClientsTab data={sorted} onAction={handleAction} />}
                     {tab === 'ai' && <AIPipelineTab data={sorted} sf={sortField} sd={sortDir} onSort={handleSort} />}
                     {tab === 'engagement' && <EngagementTab data={sorted} sf={sortField} sd={sortDir} onSort={handleSort} />}
                     {tab === 'errors' && <ErrorsTab data={sorted} sf={sortField} sd={sortDir} onSort={handleSort} />}
@@ -620,9 +844,20 @@ export default function AdminMonitoringPage() {
             </div>
 
             {/* Footer */}
-            <p className="text-center text-[11px] text-white/20 pb-4">
-                Update terakhir: {lastRefresh.toLocaleTimeString('id-ID')} · Live refresh setiap 5 detik
-            </p>
+            <div className="flex items-center justify-center gap-2 pb-6">
+                <div className="flex items-center gap-1.5 px-3 py-1 bg-white/[0.04] border border-white/[0.06] rounded-full">
+                    <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <p className="text-[11px] font-bold text-white/50 uppercase tracking-widest">
+                        Realtime Changing
+                    </p>
+                </div>
+                <span className="text-[11px] text-white/20">
+                    · Update terakhir: {lastRefresh.toLocaleTimeString('id-ID')}
+                </span>
+            </div>
         </div>
     )
 }
