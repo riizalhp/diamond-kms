@@ -1,6 +1,8 @@
 // app/api/monitoring/instances/route.ts
 // Returns all client instances with simulated real-time jitter
 import { NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+
 import prisma from '@/lib/prisma'
 
 /** Add random jitter: value ± range, clamped to [min, max] */
