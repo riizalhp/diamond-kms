@@ -197,6 +197,7 @@ model Content {
   category          String
   status            ContentStatus      @default(DRAFT)
   is_mandatory_read Boolean            @default(false)
+  image_url         String?
   source_documents  String[]
   // GraphRAG Processing Metadata
   is_processed      Boolean            @default(false)
@@ -211,6 +212,7 @@ model Content {
   organization    Organization          @relation(fields: [organization_id], references: [id], onDelete: Cascade)
   division        Division?             @relation(fields: [division_id], references: [id], onDelete: Cascade)
   versions        ContentVersion[]
+  review_comments ReviewComment[]
   approval_queues ApprovalQueue[]
   suggestions     RevisionSuggestion[]
   quizzes         Quiz[]
@@ -518,6 +520,21 @@ model ContentRelationship {
   @@index([source_entity_id])
   @@index([target_entity_id])
   @@map("content_relationships")
+}
+
+model ReviewComment {
+  id               String   @id @default(uuid())
+  content_id       String
+  author_id        String
+  highlighted_text String   @db.Text
+  comment          String   @db.Text
+  is_resolved      Boolean  @default(false)
+  created_at       DateTime @default(now())
+
+  content Content @relation(fields: [content_id], references: [id], onDelete: Cascade)
+
+  @@index([content_id])
+  @@map("review_comments")
 }
 
 model ErrorLog {
