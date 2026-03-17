@@ -121,7 +121,7 @@ export default function ApprovalsPage() {
                                 filteredQueues.map((q) => (
                                     <tr key={q.id} className="border-b last:border-0 hover:bg-surface-50">
                                         <td className="p-4">
-                                            <Link href={`/dashboard/contents/${q.content_id}`} target="_blank" className="font-medium text-navy-600 hover:underline flex items-center gap-2">
+                                            <Link href={`/dashboard/knowledge-base/${q.content_id}`} target="_blank" className="font-medium text-navy-600 hover:underline flex items-center gap-2">
                                                 <Eye size={16} /> {q.content?.title || 'Unknown Title'}
                                             </Link>
                                         </td>

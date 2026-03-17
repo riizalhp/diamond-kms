@@ -149,9 +149,9 @@ function AISettingsTab({ organization, router }: { organization: any, router: an
                     <label className="block text-sm font-semibold text-navy-900">Provider Strategy</label>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {[
-                            { id: 'managed', label: 'Managed by Movio', desc: 'Default Gemini integration' },
+                            { id: 'managed', label: 'Managed by WELDN_AI', desc: 'AI service dikelola oleh tim WELDN_AI' },
                             { id: 'byok', label: 'Bring Your Own Key', desc: 'Auto-detects Gemini or OpenAI APIs' },
-                            { id: 'self_hosted', label: 'Self-Hosted / Ollama', desc: 'Connect to a local or custom endpoint' }
+                            { id: 'self_hosted', label: 'Local Server AI', desc: 'Connect to a local or custom endpoint' }
                         ].map((p) => (
                             <label key={p.id} className={`flex items-start p-4 rounded-lg border-2 cursor-pointer transition-colors ${provider === p.id ? 'border-amber-500 bg-amber-50' : 'border-surface-200 hover:border-navy-300'}`}>
                                 <input
@@ -171,8 +171,44 @@ function AISettingsTab({ organization, router }: { organization: any, router: an
                     </div>
                 </div>
 
+                {/* WELDN_AI Managed Service Fields */}
+                {provider === 'managed' && (
+                    <div className="p-5 bg-surface-50 border border-surface-200 rounded-lg space-y-5">
+                        <div className="flex items-center gap-2 text-sm font-bold text-navy-900 mb-2">
+                            <Server size={16} className="text-navy-500" />
+                            WELDN_AI Service Configuration
+                        </div>
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-navy-900">
+                                <LinkIcon size={14} className="text-text-400" /> Service URL
+                            </label>
+                            <input
+                                type="url"
+                                value={endpoint}
+                                onChange={(e) => setEndpoint(e.target.value)}
+                                placeholder="https://api.weldn.ai/v1"
+                                className="input-field font-mono text-sm"
+                            />
+                            <p className="text-xs text-text-400">URL endpoint layanan WELDN_AI yang ditentukan oleh tim.</p>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-navy-900">
+                                <Key size={14} className="text-text-400" /> API Key
+                            </label>
+                            <input
+                                type="password"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                placeholder="Masukkan API Key dari WELDN_AI..."
+                                className="input-field font-mono text-sm"
+                            />
+                            <p className="text-xs text-text-400">API key disediakan oleh tim WELDN_AI saat aktivasi layanan.</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Conditional Fields based on Provider */}
-                {provider !== 'managed' && (
+                {provider === 'byok' && (
                     <div className="p-5 bg-surface-50 border border-surface-200 rounded-lg space-y-5">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2 text-sm font-bold text-navy-900">
@@ -182,30 +218,13 @@ function AISettingsTab({ organization, router }: { organization: any, router: an
                             <button
                                 type="button"
                                 onClick={handleFetchModels}
-                                disabled={isFetchingModels || (provider === 'self_hosted' && !endpoint.trim())}
+                                disabled={isFetchingModels}
                                 className="text-xs font-semibold text-amber-600 hover:text-amber-700 disabled:opacity-50 flex items-center gap-1.5"
                             >
                                 {isFetchingModels ? <div className="w-3 h-3 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin" /> : <RefreshCcw size={12} />}
                                 Load Available Models
                             </button>
                         </div>
-
-                        {provider === 'self_hosted' && (
-                            <div className="space-y-2">
-                                <label className="flex items-center gap-2 text-sm font-medium text-navy-900">
-                                    <LinkIcon size={14} className="text-text-400" /> Endpoint URL
-                                </label>
-                                <input
-                                    type="url"
-                                    value={endpoint}
-                                    onChange={(e) => setEndpoint(e.target.value)}
-                                    placeholder="https://llm01.weldn.ai/olla/openai/v1"
-                                    className="input-field font-mono text-sm"
-                                    required={provider === 'self_hosted'}
-                                />
-                                <p className="text-xs text-text-400">Must be an OpenAI-compatible /v1 endpoint.</p>
-                            </div>
-                        )}
 
                         <div className="space-y-2">
                             <label className="flex items-center gap-2 text-sm font-medium text-navy-900">
@@ -217,10 +236,10 @@ function AISettingsTab({ organization, router }: { organization: any, router: an
                                 onChange={(e) => setApiKey(e.target.value)}
                                 placeholder="Leave blank to keep existing key, or enter new key..."
                                 className="input-field font-mono text-sm"
-                                required={provider === 'byok' && !chatModel}
+                                required={!chatModel}
                             />
                             <p className="text-xs text-text-400">
-                                {provider === 'self_hosted' ? 'Optional for some Ollama setups.' : 'Required for BYOK. Securely encrypted before storage.'}
+                                Required for BYOK. Securely encrypted before storage.
                             </p>
                         </div>
 

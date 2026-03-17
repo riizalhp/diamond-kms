@@ -10,8 +10,10 @@ import {
 import { RoleGuard } from '@/components/shared/RoleGuard'
 import {
     Shield, ToggleLeft, ToggleRight, Plus, AlertTriangle,
-    Bell, Database, Wrench, Clock, Download, Upload, CheckCircle, Loader2, FileDown, FileUp
+    Bell, Database, Wrench, Clock, Download, Upload, CheckCircle, Loader2, FileDown, FileUp,
+    KeyRound, Copy, MonitorDot
 } from 'lucide-react'
+import Link from 'next/link'
 import { ErrorLogsSection } from './ErrorLogsSection'
 
 export default function MaintenancePage() {
@@ -233,6 +235,28 @@ export default function MaintenancePage() {
                                         />
                                     </div>
                                 )}
+                            </div>
+
+                            {/* Remote Maintenance OTP Link */}
+                            <div className="card p-6 border-2 border-surface-200">
+                                <div className="flex items-start gap-4">
+                                    <div className="p-3 rounded-xl bg-navy-100 text-navy-600">
+                                        <MonitorDot size={24} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <h2 className="font-bold font-display text-navy-900 text-lg">Akses Remote Maintenance</h2>
+                                        <p className="text-sm text-text-500 mt-1 max-w-md">
+                                            Akses fitur generate kode OTP untuk remote maintenance teknis WELDN_AI.
+                                        </p>
+                                        <Link 
+                                            href="/dashboard/hrd/remote-access"
+                                            className="btn btn-primary mt-4 inline-flex items-center gap-2"
+                                        >
+                                            <KeyRound size={16} />
+                                            Buka Halaman Akses Remote
+                                        </Link>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Feature Flags */}

@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useCurrentUser } from '@/hooks/useCurrentUser'
 import { createContentAction } from '@/lib/actions/content.actions'
 import { getDivisionsAction } from '@/lib/actions/user.actions'
-import { Save, ArrowLeft, BookOpen, Search, X, CheckCircle2 } from 'lucide-react'
+import { Save, ArrowLeft, BookOpen, Search, X, CheckCircle2, Upload, Trash2, Image as ImageIcon, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { TiptapEditor } from '@/components/editor/TiptapEditor'
+import { createClient } from '@/lib/supabase/client'
 
 export default function CreateContentPage() {
     const router = useRouter()
@@ -18,6 +19,8 @@ export default function CreateContentPage() {
     const [divisionId, setDivisionId] = useState('')
     const [bodyHtml, setBodyHtml] = useState('')
     const [isMandatory, setIsMandatory] = useState(false)
+    const [headerImage, setHeaderImage] = useState('')
+    const [uploadingHeader, setUploadingHeader] = useState(false)
     const [status, setStatus] = useState({ type: '', msg: '' })
 
     const [divisions, setDivisions] = useState<any[]>([])
@@ -61,9 +64,35 @@ export default function CreateContentPage() {
     }
 
     const appendSourceToEditor = () => {
-        // Here we could inject a formatted block into the Tiptap editor via a ref
-        // But for MVP, keeping references linked in the backend is usually enough
         setIsSourceModalOpen(false)
+    }
+
+    const handleHeaderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]
+        if (!file || !organization?.id) return
+
+        setUploadingHeader(true)
+        try {
+            const supabase = createClient()
+            const storagePath = `${organization.id}/header_images/${Date.now()}_${file.name}`
+
+            const { error } = await supabase.storage
+                .from('documents')
+                .upload(storagePath, file)
+
+            if (error) throw error
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('documents')
+                .getPublicUrl(storagePath)
+
+            setHeaderImage(publicUrl)
+        } catch (error) {
+            console.error('Header upload failed:', error)
+            alert('Gagal mengunggah header image')
+        } finally {
+            setUploadingHeader(false)
+        }
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -84,13 +113,14 @@ export default function CreateContentPage() {
             divisionId,
             orgId: organization.id,
             authorId: user.id,
-            isMandatory
+            isMandatory,
+            imageUrl: headerImage
         })
 
         if (res.success) {
             setStatus({ type: 'success', msg: 'Article created successfully (Draft)' })
             setTimeout(() => {
-                router.push('/dashboard/contents')
+                router.push('/dashboard/knowledge-base')
             }, 1000)
         } else {
             setStatus({ type: 'error', msg: res.error || 'Failed to create article' })
@@ -105,11 +135,11 @@ export default function CreateContentPage() {
     return (
         <div className="max-w-5xl mx-auto space-y-6">
             <div className="flex items-center gap-4">
-                <Link href="/dashboard/contents" className="p-2 text-text-500 hover:text-navy-900 hover:bg-surface-100 rounded-full transition">
+                <Link href="/dashboard/content" className="p-2 text-text-500 hover:text-navy-900 hover:bg-surface-100 rounded-full transition">
                     <ArrowLeft size={20} />
                 </Link>
                 <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold font-display text-navy-900">Create Knowledge Base Article</h1>
+                    <h1 className="text-2xl font-bold font-display text-navy-900">Buat Artikel Knowledge Base</h1>
                 </div>
             </div>
 
@@ -127,26 +157,70 @@ export default function CreateContentPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                         <div className="lg:col-span-8 space-y-6">
                             <div className="space-y-2">
-                                <label className="block text-sm font-medium text-text-700">Article Title <span className="text-danger">*</span></label>
+                                <label className="block text-sm font-medium text-text-700">Judul Artikel <span className="text-danger">*</span></label>
                                 <input
                                     required
                                     type="text"
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
                                     className="w-full border-surface-200 border rounded-md p-3 focus:ring-navy-600 focus:border-navy-600 text-lg font-medium"
-                                    placeholder="Enter article title..."
+                                    placeholder="Masukkan judul artikel..."
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-text-700">Header Image</label>
+                                {headerImage ? (
+                                    <div className="relative aspect-[21/9] w-full overflow-hidden rounded-xl border border-surface-200 bg-surface-50 group">
+                                        <img src={headerImage} alt="Header" className="h-full w-full object-cover" />
+                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setHeaderImage('')}
+                                                className="p-2 bg-white/20 hover:bg-white/40 text-white rounded-full backdrop-blur-md"
+                                                title="Hapus Image"
+                                            >
+                                                <Trash2 size={20} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div
+                                        onClick={() => document.getElementById('header-input')?.click()}
+                                        className="border-2 border-dashed border-surface-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-navy-400 hover:bg-surface-50 transition-all"
+                                    >
+                                        <div className="p-3 bg-surface-100 text-text-300 rounded-full">
+                                            <ImageIcon size={24} />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-sm font-bold text-navy-900">
+                                                {uploadingHeader ? 'Sedang mengunggah...' : 'Unggah Header Image'}
+                                            </p>
+                                            <p className="text-xs text-text-400 mt-0.5">Disarankan rasio 21:9 (Contoh: 1200x500px)</p>
+                                        </div>
+                                        {uploadingHeader && <Loader2 size={16} className="animate-spin text-navy-600 mt-1" />}
+                                    </div>
+                                )}
+                                <input
+                                    id="header-input"
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleHeaderUpload}
+                                    disabled={uploadingHeader}
                                 />
                             </div>
 
                             <div className="space-y-2 relative">
                                 <label className="flex items-center justify-between text-sm font-medium text-text-700 mb-1">
-                                    <span>Content Body <span className="text-danger">*</span></span>
+                                    <span>Isi Konten <span className="text-danger">*</span></span>
                                 </label>
 
                                 <TiptapEditor
                                     content={bodyHtml}
                                     onChange={setBodyHtml}
                                     onOpenSources={() => setIsSourceModalOpen(true)}
+                                    orgId={organization?.id}
                                 />
 
                                 {selectedSources.length > 0 && (
@@ -161,10 +235,10 @@ export default function CreateContentPage() {
 
                         <div className="lg:col-span-4 space-y-6">
                             <div className="bg-surface-50 border border-surface-200 p-5 rounded-lg space-y-6">
-                                <h3 className="font-bold text-navy-900 font-display pb-3 border-b border-surface-200">Metadata</h3>
+                                <h3 className="font-bold text-navy-900 font-display pb-3 border-b border-surface-200">Metadata / Atribut</h3>
 
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-text-700">Division / Target Audience <span className="text-danger">*</span></label>
+                                    <label className="block text-sm font-medium text-text-700">Divisi / Target Audiens <span className="text-danger">*</span></label>
                                     <select
                                         required
                                         value={divisionId}
@@ -172,7 +246,7 @@ export default function CreateContentPage() {
                                         disabled={isDivisionLocked}
                                         className={`w-full border-surface-200 border rounded-md p-2.5 focus:ring-navy-600 focus:border-navy-600 bg-white ${isDivisionLocked ? 'opacity-60 cursor-not-allowed bg-surface-50' : ''}`}
                                     >
-                                        <option value="" disabled>Select Division...</option>
+                                        <option value="" disabled>Pilih Divisi...</option>
                                         {!isDivisionLocked && (
                                             <option value="global" className="font-bold">🌐 Global Organization (All)</option>
                                         )}
@@ -188,7 +262,7 @@ export default function CreateContentPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="block text-sm font-medium text-text-700">Category / Type <span className="text-danger">*</span></label>
+                                    <label className="block text-sm font-medium text-text-700">Kategori / Tipe <span className="text-danger">*</span></label>
                                     <select
                                         required
                                         value={category}
@@ -214,9 +288,9 @@ export default function CreateContentPage() {
                                             />
                                         </div>
                                         <div>
-                                            <span className="text-sm font-bold text-navy-900 block">Mandatory Reading</span>
+                                            <span className="text-sm font-bold text-navy-900 block">Wajib Baca</span>
                                             <p className="text-xs text-text-500 mt-0.5 leading-snug">
-                                                Require designated employees to acknowledge this article.
+                                                Mewajibkan karyawan yang dituju untuk mengonfirmasi telah membaca artikel ini.
                                             </p>
                                         </div>
                                     </label>
@@ -227,10 +301,10 @@ export default function CreateContentPage() {
 
                     <div className="pt-6 flex justify-end gap-3 border-t">
                         <Link
-                            href="/dashboard/contents"
+                            href="/dashboard/content"
                             className="px-6 py-2.5 border border-surface-200 text-text-700 rounded-md hover:bg-surface-50 font-medium transition"
                         >
-                            Cancel
+                            Batal
                         </Link>
                         <button
                             type="submit"
@@ -238,7 +312,7 @@ export default function CreateContentPage() {
                             className="btn btn-primary shadow-md hover:-translate-y-0.5"
                         >
                             <Save size={18} />
-                            Save as Draft
+                            Simpan sebagai draf
                         </button>
                     </div>
                 </form>
@@ -253,7 +327,7 @@ export default function CreateContentPage() {
                                 <div className="p-2 bg-navy-100 text-navy-700 rounded-lg">
                                     <BookOpen size={20} />
                                 </div>
-                                <h2 className="text-xl font-bold font-display text-navy-900">Link Source Documents</h2>
+                                <h2 className="text-xl font-bold font-display text-navy-900">Tautkan Dokumen Sumber</h2>
                             </div>
                             <button onClick={() => setIsSourceModalOpen(false)} className="text-text-400 hover:text-text-700 bg-surface-100 hover:bg-surface-200 rounded p-1 transition">
                                 <X size={20} />
@@ -265,7 +339,7 @@ export default function CreateContentPage() {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-400" size={18} />
                                 <input
                                     type="text"
-                                    placeholder="Search repository documents by title or filename..."
+                                    placeholder="Cari dokumen repositori berdasarkan judul atau nama file..."
                                     value={docSearch}
                                     onChange={e => setDocSearch(e.target.value)}
                                     className="w-full pl-10 pr-4 py-2.5 bg-surface-50 border border-surface-200 rounded-md focus:ring-navy-600 focus:border-navy-600 focus:bg-white transition"
@@ -275,9 +349,9 @@ export default function CreateContentPage() {
 
                         <div className="flex-1 overflow-y-auto p-5 space-y-3 bg-surface-50/30">
                             {documents.length === 0 ? (
-                                <div className="text-center py-10 text-text-500">No documents found in the repository.</div>
+                                <div className="text-center py-10 text-text-500">Tidak ada dokumen ditemukan di repositori.</div>
                             ) : filteredDocs.length === 0 ? (
-                                <div className="text-center py-10 text-text-500">No documents match your search.</div>
+                                <div className="text-center py-10 text-text-500">Tidak ada dokumen yang cocok dengan pencarian Anda.</div>
                             ) : (
                                 filteredDocs.map((doc) => {
                                     const isSelected = selectedSources.includes(doc.id)
@@ -320,14 +394,14 @@ export default function CreateContentPage() {
 
                         <div className="p-5 border-t bg-white rounded-b-xl flex justify-between items-center">
                             <div className="text-sm text-text-500">
-                                {selectedSources.length} document(s) selected
+                                {selectedSources.length} dokumen terpilih
                             </div>
                             <button
                                 type="button"
                                 onClick={appendSourceToEditor}
                                 className="btn btn-primary"
                             >
-                                Confirm Selection
+                                Konfirmasi Pilihan
                             </button>
                         </div>
                     </div>

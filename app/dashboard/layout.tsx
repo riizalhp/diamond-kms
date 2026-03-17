@@ -1,15 +1,16 @@
 'use client'
 
 import { useCurrentUser, UserProvider } from '@/hooks/useCurrentUser'
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import {
     Home, FileText, Tags, Bot, Award, FileQuestion, Users,
-    Network, CreditCard, Activity, CheckSquare, ListTodo,
+    Network, CreditCard, Activity,
     Shield, FolderTree, Settings, Menu, Sparkles, Wrench, Search, X,
-    ChevronDown, ChevronRight, PanelLeftOpen, PanelLeftClose
+    ChevronDown, ChevronRight, PanelLeftOpen, PanelLeftClose,
+    KeyRound, Building, MonitorDot, Globe
 } from 'lucide-react'
 import { NotificationBell } from '@/components/shared/NotificationBell'
 import SmartSearch from '@/components/search/SmartSearch'
@@ -24,42 +25,211 @@ import {
 // Icon mapping function
 const getIconForLabel = (label: string) => {
     switch (label) {
-        case 'Knowledge Base': return <Tags size={16} />
-        case 'Quizzes': return <FileQuestion size={16} />
-        case 'FAQ': return <Bot size={16} />
-        case 'AISA': return <Sparkles size={16} />
-        case 'User': return <Users size={16} />
-        case 'Settings': return <Settings size={16} />
         case 'Dashboard': return <Home size={16} />
+        case 'FAQ':
+        case 'FAQs / Help': return <Bot size={16} />
+        case 'AISA':
+        case 'Kelola Knowledge Base':
+        case 'Cari & Tanya AI':
+        case 'AI Assistant': return <Sparkles size={16} />
+        case 'Knowledge Base': return <Tags size={16} />
+        case 'Content':
+        case 'Manage Content':
+        case 'Kelola Konten':
+        case 'Dokumen':
+        case 'Manage Document':
+        case 'Documents': return <FileText size={16} />
+        case 'Quizzes':
+        case 'Quiz':
+        case 'Pemahaman Pegawai': return <FileQuestion size={16} />
+        case 'User':
+        case 'Users':
+        case 'Anggota': return <Users size={16} />
+        case 'Organization Settings':
+        case 'Organization': return <Settings size={16} />
+        case 'OTP':
+        case 'Activation': return <KeyRound size={16} />
+        case 'Akses Remote': return <MonitorDot size={16} />
+        case 'Divisi': return <Network size={16} />
+        case 'Leaderboard': return <Award size={16} />
+        case 'Divisions': return <Network size={16} />
+        case 'Billing': return <CreditCard size={16} />
+        case 'AI Management': return <Sparkles size={16} />
+        case 'System Overview': return <Shield size={16} />
+        case 'Organizations': return <FolderTree size={16} />
+        case 'Logs': return <Activity size={16} />
+        case 'Website': return <Globe size={16} />
         default: return <FileText size={16} />
     }
 }
 
-// Simple sidebar mapping based on roles
-const getNavLinks = (role?: string) => {
-    const base = [
+interface NavItem {
+    label: string
+    href: string
+}
+
+interface NavGroup {
+    label: string
+    icon: string
+    children: NavItem[]
+}
+
+type NavEntry = NavItem | NavGroup
+
+function isNavGroup(entry: NavEntry): entry is NavGroup {
+    return 'children' in entry
+}
+
+// Nav structure per role
+const getNavEntries = (role?: string): NavEntry[] => {
+    const base: NavEntry[] = [
         { label: 'Dashboard', href: '/dashboard' },
         { label: 'FAQ', href: '/dashboard/faqs' },
         { label: 'AISA', href: '/dashboard/ai-assistant' },
-        { label: 'Knowledge Base', href: '/dashboard/contents' },
-        { label: 'Quizzes', href: '/dashboard/quizzes' },
-        { label: 'User', href: '/dashboard/hrd/users' },
-        { label: 'Settings', href: '/dashboard/hrd/settings' },
+        {
+            label: 'Knowledge Base',
+            icon: 'Tags',
+            children: [
+                { label: 'Kelola Knowledge Base', href: '/dashboard/knowledge-base' },
+                { label: 'Manage Document', href: '/dashboard/documents' },
+                { label: 'Manage Content', href: '/dashboard/content' }
+            ]
+        },
+        {
+            label: 'Quizzes',
+            icon: 'FileQuestion',
+            children: [
+                { label: 'Quiz', href: '/dashboard/quizzes' },
+                { label: 'Leaderboard', href: '/dashboard/quizzes?view=leaderboard' },
+            ]
+        },
     ]
 
-    // We follow CRITICAL RULE: only these 7 menus in this exact order.
-    // However, some roles might have restricted access in the original code.
-    // The prompt says: "Susun ulang urutan menu HANYA menjadi: 1. Dashboard, 2. FAQ, 3. AISA, 4. Knowledge Base, 5. Quizzes, 6. User, 7. Settings."
+    if (role === 'SUPER_ADMIN') {
+        return [
+            ...base,
+            {
+                label: 'User',
+                icon: 'Users',
+                children: [
+                    { label: 'Anggota', href: '/dashboard/hrd/users' },
+                    { label: 'Divisi', href: '/dashboard/hrd/users/divisions' },
+                ]
+            },
+            // Divisions removed as it's now in the User accordion
+            {
+                label: 'Settings',
+                icon: 'Settings',
+                children: [
+                    { label: 'Billing', href: '/dashboard/hrd/billing' },
+                    { label: 'AI Management', href: '/dashboard/hrd/ai' },
+                    { label: 'Maintenance', href: '/dashboard/hrd/maintenance' },
+                    { label: 'Activation', href: '/dashboard/hrd/otp' },
+                    { label: 'Organization', href: '/dashboard/hrd/settings' },
+                    { label: 'Website', href: '/dashboard/hrd/website' },
+                ],
+            },
+        ]
+    }
 
-    // For SUPER_ADMIN/GROUP_ADMIN we might need to preserve some items but the prompt is strict about the order and the list.
-    // I will filter 'base' to make sure it only contains these 7.
+    if (role === 'GROUP_ADMIN') {
+        return [
+            ...base,
+            {
+                label: 'User',
+                icon: 'Users',
+                children: [
+                    { label: 'Anggota', href: '/dashboard/hrd/users' },
+                    { label: 'Divisi', href: '/dashboard/hrd/users/divisions' },
+                ]
+            },
+        ]
+    }
+
+    if (role === 'SUPERVISOR') {
+        return [
+            ...base,
+        ]
+    }
+
+    if (role === 'MAINTAINER') {
+        return [
+            { label: 'System Overview', href: '/dashboard/maintainer' },
+            { label: 'Organizations', href: '/dashboard/maintainer/organizations' },
+            { label: 'AI Providers', href: '/dashboard/maintainer/ai-providers' },
+            { label: 'Monitoring', href: '/admin/monitoring' },
+            { label: 'Logs', href: '/dashboard/maintainer/logs' },
+        ]
+    }
 
     return base
 }
 
+/* ── Accordion sidebar group ── */
+function SidebarGroup({ group, pathname, searchParams }: { group: NavGroup; pathname: string; searchParams: URLSearchParams }) {
+    const checkIsActive = (href: string) => {
+        const [path, query] = href.split('?')
+        if (query) {
+            return pathname === path && searchParams.toString().includes(query)
+        }
+        return pathname === path && !searchParams.toString()
+    }
+
+    const hasActiveChild = group.children.some(c => checkIsActive(c.href))
+    const [open, setOpen] = useState(hasActiveChild)
+
+    return (
+        <div>
+            <button
+                onClick={() => setOpen(!open)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-colors ${
+                    hasActiveChild
+                        ? 'bg-navy-600/30 text-white'
+                        : 'text-surface-300 hover:text-white hover:bg-white/5'
+                }`}
+            >
+                <span className="flex items-center gap-3">
+                    <span className={hasActiveChild ? 'text-navy-400' : 'text-sidebar-muted'}>
+                        {getIconForLabel(group.label)}
+                    </span>
+                    <span className="text-white">{group.label}</span>
+                </span>
+                <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 ${open ? 'rotate-180' : ''} text-white`}
+                />
+            </button>
+
+            {/* Sub-items */}
+            <div className={`overflow-hidden transition-all duration-200 ${open ? 'max-h-[300px] mt-1' : 'max-h-0'}`}>
+                <div className="pl-4 space-y-0.5">
+                    {group.children.map(child => {
+                        const isActive = checkIsActive(child.href)
+                        return (
+                            <Link
+                                key={child.href}
+                                href={child.href}
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+                                    isActive
+                                        ? 'bg-navy-600/20'
+                                        : 'hover:bg-white/5'
+                                }`}
+                            >
+                                <span className={isActive ? 'text-amber-400' : 'text-white'}>
+                                    {getIconForLabel(child.label)}
+                                </span>
+                                <span className="text-white">{child.label}</span>
+                            </Link>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 function DashboardLayoutInner({ children }: { children: ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-    const [openMenus, setOpenMenus] = useState<string[]>([])
     const { user, role, organization, isLoading } = useCurrentUser()
     const pathname = usePathname()
     const searchParams = useSearchParams()
@@ -86,39 +256,7 @@ function DashboardLayoutInner({ children }: { children: ReactNode }) {
         return null
     }
 
-    const navLinks = getNavLinks(role)
-
-    const toggleMenu = (label: string) => {
-        setOpenMenus(prev =>
-            prev.includes(label)
-                ? prev.filter(m => m !== label)
-                : [...prev, label]
-        )
-    }
-
-    const menuItems = [
-        { label: 'Dashboard', href: '/dashboard' },
-        { label: 'FAQ', href: '/dashboard/faqs' },
-        { label: 'AISA', href: '/dashboard/ai-assistant' },
-        { label: 'Knowledge Base', href: '/dashboard/contents' },
-        {
-            label: 'Quizzes',
-            href: '#',
-            submenus: [
-                { label: 'Quiz', href: '/dashboard/quizzes' },
-                { label: 'Leaderboard', href: '/dashboard/quizzes?view=leaderboard' },
-            ]
-        },
-        {
-            label: 'User',
-            href: '#',
-            submenus: [
-                { label: 'Anggota', href: '/dashboard/hrd/users' },
-                { label: 'Divisi', href: '/dashboard/hrd/users/divisions' },
-            ]
-        },
-        { label: 'Settings', href: '/dashboard/hrd/settings' },
-    ]
+    const navEntries = getNavEntries(role)
 
     return (
         <div className="flex h-screen bg-surface-50 overflow-hidden relative">
@@ -145,74 +283,19 @@ function DashboardLayoutInner({ children }: { children: ReactNode }) {
 
                 {/* Navigation Links */}
                 <nav className="flex-1 px-3 py-4 flex flex-col gap-1 overflow-y-auto scrollbar-thin">
-                    {menuItems.map(item => {
-                        const hasSubmenus = !!item.submenus
-                        const isOpen = openMenus.includes(item.label)
-                        const isActive = item.href !== '#' && (item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href))
-
-                        if (hasSubmenus) {
-                            const isAnySubActive = item.submenus?.some(sub => {
-                                const [subPath, subQuery] = sub.href.split('?')
-                                const isPathMatches = pathname === subPath
-                                if (subQuery) {
-                                    // Match specific query param like view=leaderboard
-                                    return isPathMatches && searchParams.toString().includes(subQuery)
-                                }
-                                // For items without query, only active if pathname matches and no 'view' param is present
-                                return isPathMatches && !searchParams.get('view')
-                            })
-
-                            return (
-                                <div key={item.label} className="flex flex-col gap-1">
-                                    <button
-                                        onClick={() => toggleMenu(item.label)}
-                                        className={`relative flex items-center justify-between px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-all ${isOpen || isAnySubActive
-                                            ? 'text-sidebar-foreground bg-white/5 shadow-inner shadow-white/5'
-                                            : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/5'
-                                            }`}
-                                    >
-                                        {isAnySubActive && (
-                                            <div className="absolute left-0 w-1 h-6 bg-navy-400 rounded-r-full shadow-[0_0_10px_rgba(96,165,250,0.5)]" />
-                                        )}
-                                        <div className="flex items-center gap-3">
-                                            <span className={isOpen || isAnySubActive ? 'text-navy-400' : 'text-sidebar-muted'}>
-                                                {getIconForLabel(item.label)}
-                                            </span>
-                                            {item.label}
-                                        </div>
-                                        {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                    </button>
-
-                                    {isOpen && (
-                                        <div className="flex flex-col gap-1 ml-4 pl-4 border-l border-white/10 mt-1 mb-1">
-                                            {item.submenus?.map(sub => {
-                                                const [subPath, subQuery] = sub.href.split('?')
-                                                const isSubActive = subQuery 
-                                                    ? (pathname === subPath && searchParams.toString().includes(subQuery))
-                                                    : (pathname === subPath && !searchParams.get('view'))
-
-                                                return (
-                                                    <Link
-                                                        key={sub.href}
-                                                        href={sub.href}
-                                                        className={`px-3 py-2 rounded-lg text-[13px] font-medium transition-all ${isSubActive
-                                                            ? 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold shadow-sm'
-                                                            : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/5'
-                                                            }`}
-                                                    >
-                                                        {sub.label}
-                                                    </Link>
-                                                )
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            )
+                    {navEntries.map((entry, idx) => {
+                        if (isNavGroup(entry)) {
+                            return <SidebarGroup key={entry.label} group={entry} pathname={pathname} searchParams={searchParams} />
                         }
+                        const item = entry as NavItem
+                        const [itemPath, itemQuery] = item.href.split('?')
+                        const isActive = itemQuery 
+                            ? (pathname === itemPath && searchParams.toString().includes(itemQuery))
+                            : (pathname === itemPath && !searchParams.toString())
 
                         return (
                             <Link
-                                key={item.href}
+                                key={item.label}
                                 href={item.href}
                                 className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-all ${isActive
                                     ? 'bg-navy-600/30 text-sidebar-foreground shadow-inner shadow-white/10'
@@ -321,7 +404,11 @@ function DashboardLayoutInner({ children }: { children: ReactNode }) {
 export default function DashboardLayout({ children }: { children: ReactNode }) {
     return (
         <UserProvider>
-            <DashboardLayoutInner>{children}</DashboardLayoutInner>
+            <Suspense fallback={<div className="flex h-screen items-center justify-center bg-surface-50">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-navy-600 border-t-transparent"></div>
+            </div>}>
+                <DashboardLayoutInner>{children}</DashboardLayoutInner>
+            </Suspense>
         </UserProvider>
     )
 }

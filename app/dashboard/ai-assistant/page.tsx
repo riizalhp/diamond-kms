@@ -495,7 +495,7 @@ export default function AIAssistantPage() {
                                 {citations.slice(0, 6).map((c, i) => {
                                     const isArticle = c.sourceType === 'ARTICLE'
                                     const href = isArticle
-                                        ? `/dashboard/contents/${c.documentId}`
+                                        ? `/dashboard/knowledge-base/${c.documentId}`
                                         : `/dashboard/documents/${c.documentId}`
                                     return (
                                         <a
