@@ -95,30 +95,18 @@ export default function WebsiteSettingsPage() {
             console.error(err)
         } finally {
             setIsSaving(false)
-<<<<<<< Updated upstream
-            setSuccess('Website configuration saved successfully!')
-        }, 1000)
-=======
             setTimeout(() => setSuccess(''), 5000)
         }
->>>>>>> Stashed changes
     }
 
     return (
         <RoleGuard allowedRoles={['SUPER_ADMIN', 'MAINTAINER']}>
-<<<<<<< Updated upstream
-            <div className="space-y-6 max-w-4xl mx-auto">
-                <div>
-                    <h1 className="text-[28px] font-bold font-display text-navy-900 leading-tight">Website Settings</h1>
-                    <p className="text-sm text-text-500 mt-1">Customize the visual identity and branding of your application.</p>
-=======
             <div className="space-y-6 max-w-6xl mx-auto">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-[28px] font-bold font-display text-navy-900 leading-tight">Appearance Settings</h1>
                         <p className="text-sm text-text-500 mt-1">Configure your workspace branding, system preferences, and feature flags.</p>
                     </div>
->>>>>>> Stashed changes
                 </div>
 
                 {loading ? (
@@ -126,60 +114,6 @@ export default function WebsiteSettingsPage() {
                         <Loader2 className="w-10 h-10 text-navy-600 animate-spin mb-4" />
                         <p className="text-text-500 font-medium font-display">Loading your settings...</p>
                     </div>
-<<<<<<< Updated upstream
-                )}
-
-                <form onSubmit={handleSave} className="space-y-6">
-                    <div className="card p-6 space-y-8">
-                        {/* Identitas Dasar */}
-                        <div className="space-y-4">
-                            <h2 className="text-lg font-bold text-navy-900 flex items-center gap-2">
-                                <Layout size={20} className="text-navy-500" />
-                                Brand Identity
-                            </h2>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-semibold text-text-700 flex items-center gap-2">
-                                        Organization Name
-                                    </label>
-                                    <input 
-                                        type="text" 
-                                        value={orgName}
-                                        onChange={(e) => setOrgName(e.target.value)}
-                                        className="input-field"
-                                        placeholder="Example: WELDN_AI"
-                                    />
-                                    <p className="text-[11px] text-text-400 font-mono">ID: internal-org-001</p>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-semibold text-text-700 flex items-center gap-2">
-                                        Application Name
-                                    </label>
-                                    <input 
-                                        type="text" 
-                                        value={appName}
-                                        onChange={(e) => setAppName(e.target.value)}
-                                        className="input-field border-navy-200 focus:border-navy-600"
-                                        placeholder="Example: DIAMOND KMS"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-semibold text-text-700 flex items-center gap-2">
-                                    <Type size={14} className="text-text-400" /> Application Slogan
-                                </label>
-                                <input 
-                                    type="text" 
-                                    value={slogan}
-                                    onChange={(e) => setSlogan(e.target.value)}
-                                    className="input-field"
-                                    placeholder="Brief description of the application..."
-                                />
-                            </div>
-                        </div>
-=======
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
                         <div className="lg:col-span-3 space-y-6">
@@ -196,7 +130,6 @@ export default function WebsiteSettingsPage() {
                                     <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none">
                                         <Globe size={120} className="text-navy-900" />
                                     </div>
->>>>>>> Stashed changes
 
                                     <div className="space-y-4 relative">
                                         <h2 className="text-lg font-bold text-navy-900 flex items-center gap-2">
@@ -263,13 +196,6 @@ export default function WebsiteSettingsPage() {
                                                     <ImageIcon size={20} className="text-white" />
                                                 </div>
                                             </div>
-<<<<<<< Updated upstream
-                                            <div className="flex-1">
-                                                <button type="button" className="btn bg-white border border-surface-300 text-text-600 w-full text-sm hover:bg-surface-50">
-                                                    Change Logo
-                                                </button>
-                                                <p className="text-[10px] text-text-400 mt-2">Format: PNG, SVG, or WEBP. Recommended 512x512px.</p>
-=======
                                             <div className="flex-1 space-y-3">
                                                 <button type="button" className="btn bg-white border border-surface-300 text-text-600 w-full md:w-auto px-6 text-sm hover:bg-surface-50 hover:border-navy-300 transition-all font-semibold">
                                                     Change Logo
@@ -277,7 +203,6 @@ export default function WebsiteSettingsPage() {
                                                 <p className="text-[10px] text-text-400 max-w-sm">
                                                     Supported formats: <span className="font-semibold text-text-600">PNG, SVG, WEBP</span>. Recommended size: <span className="font-semibold text-text-600">512x512px</span>.
                                                 </p>
->>>>>>> Stashed changes
                                             </div>
                                         </div>
                                     </div>
@@ -455,37 +380,7 @@ export default function WebsiteSettingsPage() {
                             </div>
                         </div>
                     </div>
-<<<<<<< Updated upstream
-
-                    <div className="flex justify-end gap-3">
-                        <button 
-                            type="button" 
-                            className="btn bg-white border border-surface-300 text-text-600 px-6"
-                            onClick={() => {
-                                setAppName('DIAMOND KMS')
-                                setSlogan('AI Powered Knowledge Management System')
-                                setLogo('logo_movio.png')
-                            }}
-                        >
-                            Reset
-                        </button>
-                        <button 
-                            type="submit" 
-                            disabled={isSaving}
-                            className="btn btn-primary px-8 flex items-center gap-2 shadow-lg shadow-navy-600/20"
-                        >
-                            {isSaving ? (
-                                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                                <Save size={18} />
-                            )}
-                            Save Changes
-                        </button>
-                    </div>
-                </form>
-=======
                 )}
->>>>>>> Stashed changes
             </div>
         </RoleGuard>
     )
