@@ -138,7 +138,7 @@ export default function QuizzesPage() {
             <div className="flex justify-between items-end">
                 <div>
                     <h1 className="text-[32px] font-black font-display text-text-900 leading-tight tracking-tight">
-                        {activeTab === 'Leaderboard' ? 'Leaderboard' : 'All Quizzes'}
+                        {activeTab === 'Leaderboard' ? 'Leaderboard' : 'Quiz Management'}
                     </h1>
                     <p className="text-sm text-text-500 mt-1.5 font-medium">
                         {activeTab === 'Leaderboard' ? 'Monitor rankings and achievements.' : 'Test your understanding through interactive learning modules.'}

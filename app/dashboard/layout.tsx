@@ -29,21 +29,22 @@ const getIconForLabel = (label: string) => {
         case 'FAQ':
         case 'FAQs / Help': return <Bot size={16} />
         case 'AISA':
-        case 'Manage Knowledge Base':
+        case 'Knowledge Base':
         case 'Search & Ask AI':
         case 'AI Assistant': return <Sparkles size={16} />
-        case 'Knowledge Base': return <Tags size={16} />
+        case 'Knowledge Management': return <Tags size={16} />
         case 'Content':
         case 'Manage Content':
         case 'Manage Articles':
+        case 'Document':
         case 'Documents':
         case 'Manage Documents': return <FileText size={16} />
-        case 'Quizzes':
+        case 'Quiz Management':
         case 'Quiz':
         case 'Employee Assessment': return <FileQuestion size={16} />
-        case 'User':
+        case 'User Management':
         case 'Users':
-        case 'Members': return <Users size={16} />
+        case 'User': return <Users size={16} />
         case 'Organization Settings':
         case 'Organization': return <Settings size={16} />
         case 'OTP':
@@ -51,6 +52,7 @@ const getIconForLabel = (label: string) => {
         case 'Remote Access': return <MonitorDot size={16} />
         case 'Division': return <Network size={16} />
         case 'Leaderboard': return <Award size={16} />
+        case 'Group':
         case 'Divisions': return <Network size={16} />
         case 'Billing': return <CreditCard size={16} />
         case 'AI Management': return <Sparkles size={16} />
@@ -86,16 +88,16 @@ const getNavEntries = (role?: string): NavEntry[] => {
         { label: 'FAQ', href: '/dashboard/faqs' },
         { label: 'AISA', href: '/dashboard/ai-assistant' },
         {
-            label: 'Knowledge Base',
+            label: 'Knowledge Management',
             icon: 'Tags',
             children: [
-                { label: 'Manage Knowledge Base', href: '/dashboard/knowledge-base' },
-                { label: 'Manage Documents', href: '/dashboard/documents' },
-                { label: 'Manage Articles', href: '/dashboard/content' }
+                { label: 'Knowledge Base', href: '/dashboard/knowledge-base' },
+                { label: 'Document', href: '/dashboard/documents' },
+                { label: 'Content', href: '/dashboard/content' }
             ]
         },
         {
-            label: 'Quizzes',
+            label: 'Quiz Management',
             icon: 'FileQuestion',
             children: [
                 { label: 'Quiz', href: '/dashboard/quizzes' },
@@ -108,11 +110,11 @@ const getNavEntries = (role?: string): NavEntry[] => {
         return [
             ...base,
             {
-                label: 'User',
+                label: 'User Management',
                 icon: 'Users',
                 children: [
-                    { label: 'Members', href: '/dashboard/hrd/users' },
-                    { label: 'Divisions', href: '/dashboard/hrd/users/divisions' },
+                    { label: 'User', href: '/dashboard/hrd/users' },
+                    { label: 'Group', href: '/dashboard/hrd/users/divisions' },
                 ]
             },
             // Divisions removed as it's now in the User accordion
@@ -181,14 +183,14 @@ function SidebarGroup({ group, pathname, searchParams }: { group: NavGroup; path
         <div>
             <button
                 onClick={() => setOpen(!open)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-[13px] font-medium transition-colors ${
                     hasActiveChild
                         ? 'bg-navy-600/30 text-white'
                         : 'text-surface-300 hover:text-white hover:bg-white/5'
                 }`}
             >
-                <span className="flex items-center gap-3">
-                    <span className={hasActiveChild ? 'text-navy-400' : 'text-sidebar-muted'}>
+                <span className="flex items-center gap-2">
+                    <span className={hasActiveChild ? 'text-navy-400' : 'text-white/80'}>
                         {getIconForLabel(group.label)}
                     </span>
                     <span className="text-white">{group.label}</span>
@@ -208,7 +210,7 @@ function SidebarGroup({ group, pathname, searchParams }: { group: NavGroup; path
                             <Link
                                 key={child.href}
                                 href={child.href}
-                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
+                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors ${
                                     isActive
                                         ? 'bg-navy-600/20'
                                         : 'hover:bg-white/5'
@@ -262,7 +264,7 @@ function DashboardLayoutInner({ children }: { children: ReactNode }) {
             {/* Sidebar */}
             <aside 
                 className={`bg-navy-sidebar border-r border-white/5 flex flex-col hidden md:flex shrink-0 transition-all duration-300 ease-in-out overflow-hidden shadow-2xl z-20 ${
-                    isSidebarOpen ? 'w-[260px] opacity-100' : 'w-0 opacity-0 pointer-events-none'
+                    isSidebarOpen ? 'w-[280px] opacity-100' : 'w-0 opacity-0 pointer-events-none'
                 }`}
             >
                 {/* Brand Logo */}
@@ -296,15 +298,15 @@ function DashboardLayoutInner({ children }: { children: ReactNode }) {
                             <Link
                                 key={item.label}
                                 href={item.href}
-                                className={`relative flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-[14px] font-medium transition-all ${isActive
+                                className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all ${isActive
                                     ? 'bg-navy-600/30 text-sidebar-foreground shadow-inner shadow-white/10'
-                                    : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/5'
+                                    : 'text-white hover:text-sidebar-foreground hover:bg-white/5'
                                     }`}
                             >
                                 {isActive && (
                                     <div className="absolute left-0 w-1 h-6 bg-navy-400 rounded-r-full shadow-[0_0_10px_rgba(96,165,250,0.5)]" />
                                 )}
-                                <span className={isActive ? 'text-navy-400' : 'text-sidebar-muted'}>
+                                <span className={isActive ? 'text-navy-400' : 'text-white/80'}>
                                     {getIconForLabel(item.label)}
                                 </span>
                                 {item.label}
