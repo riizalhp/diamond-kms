@@ -65,7 +65,7 @@ const getIconForLabel = (label: string) => {
         case 'System Overview': return <Shield size={16} />
         case 'Organizations': return <FolderTree size={16} />
         case 'Logs': return <Activity size={16} />
-        case 'Appearance':
+        case 'Application':
         case 'Website':
         case 'Website & System': return <Globe size={16} />
         default: return <FileText size={16} />
@@ -134,7 +134,7 @@ const getNavEntries = (role?: string): NavEntry[] => {
                     { label: 'AI Management', href: '/dashboard/hrd/ai' },
                     { label: 'Maintenance', href: '/dashboard/hrd/maintenance' },
                     { label: 'Activation', href: '/dashboard/hrd/otp' },
-                    { label: 'Appearance', href: '/dashboard/hrd/website' },
+                    { label: 'Application', href: '/dashboard/hrd/website' },
                 ],
             },
         ]

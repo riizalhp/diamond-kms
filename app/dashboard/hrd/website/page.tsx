@@ -32,6 +32,7 @@ export default function WebsiteSettingsPage() {
     const [slogan, setSlogan] = useState('AI Powered Knowledge Management System')
     const [logo, setLogo] = useState('logo_movio.png')
     const [crossDiv, setCrossDiv] = useState(false)
+    const [systemLanguage, setSystemLanguage] = useState('en-US')
     
     const [isSaving, setIsSaving] = useState(false)
     const [success, setSuccess] = useState('')
@@ -104,7 +105,7 @@ export default function WebsiteSettingsPage() {
             <div className="space-y-6 max-w-6xl mx-auto">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                        <h1 className="text-[28px] font-bold font-display text-navy-900 leading-tight">Appearance Settings</h1>
+                        <h1 className="text-[28px] font-bold font-display text-navy-900 leading-tight">Application Settings</h1>
                         <p className="text-sm text-text-500 mt-1">Configure your workspace branding, system preferences, and feature flags.</p>
                     </div>
                 </div>
@@ -234,6 +235,33 @@ export default function WebsiteSettingsPage() {
                                             <p className="text-sm text-text-500 mt-1 leading-relaxed">
                                                 Allow users to search and ask questions across all divisions. Enabling this might compromise division-level data privacy.
                                             </p>
+                                        </div>
+                                    </div>
+
+                                    {/* System Language Picker */}
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface-50 border border-surface-200 rounded-2xl p-5 transition-all hover:bg-surface-100/50 hover:shadow-sm group overflow-hidden relative">
+                                        <div className="flex items-start gap-4">
+                                            <div className="p-2 bg-navy-50 rounded-xl group-hover:bg-navy-100 transition-colors">
+                                                <Globe size={18} className="text-navy-600" />
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-navy-900 group-hover:text-navy-600 transition-colors">System Language</p>
+                                                <p className="text-sm text-text-500 mt-1">Select your preferred language for the system interface.</p>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="relative min-w-[160px]">
+                                            <select
+                                                value={systemLanguage}
+                                                onChange={(e) => setSystemLanguage(e.target.value)}
+                                                className="w-full bg-white border border-surface-300 text-navy-900 text-sm rounded-xl px-4 py-2.5 outline-none focus:border-navy-500 focus:ring-4 focus:ring-navy-500/10 appearance-none font-semibold cursor-pointer transition-all"
+                                            >
+                                                <option value="en-US">English (US)</option>
+                                                <option value="id-ID">Indonesia</option>
+                                            </select>
+                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-400">
+                                                <Settings size={14} className="opacity-50" />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
